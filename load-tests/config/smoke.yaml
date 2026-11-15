@@ -1,0 +1,24 @@
+# Overlay on acceptance.yaml. Only test the plumbing, never infer capacity.
+profile: smoke
+workloads: [read, write, mixed]
+fixture:
+  users: 5
+  trips: 100
+load:
+  initial_vu: 1
+  warmup_seconds: 1
+  discovery_warmup_seconds: 1
+  settle_seconds: 1
+  measure_seconds: 5
+  confirm_seconds: 5
+  confirm_repeats: 1
+  connect_timeout: 2
+  read_timeout: 5
+  drain_seconds: 8
+  total_budget_seconds: 900
+concurrency:
+  bursts: [2]
+  rounds: 1
+runtime:
+  enable_faults: false
+  enable_jfr_diagnostic: false

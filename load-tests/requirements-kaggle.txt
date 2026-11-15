@@ -1,0 +1,8 @@
+locust==2.47.0
+psutil==7.2.2
+psycopg[binary]==3.3.3
+requests==2.33.1
+PyYAML==6.0.3
+bcrypt==5.0.0
+# Kaggle's Python startup hooks may import wrapt even inside a separate venv.
+wrapt==2.0.1
