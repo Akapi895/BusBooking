@@ -3,6 +3,7 @@ package com.example.busbooking.data.repository;
 
 import com.example.busbooking.data.entity.TripEntity;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -32,30 +33,6 @@ public interface SpringDataTripRepository
                                   LocalDateTime start, LocalDateTime end,
                                   boolean skipRoute, boolean skipStatus, boolean skipDate);
 
-    // Giữ nguyên API mà RepositoryAdapter đang sử dụng
-    default List<TripEntity> search(
-            Long originId,
-            Long destinationId,
-            LocalDateTime departureDate,
-            LocalDateTime departureDateEnd
-    ) {
-        if ((departureDate == null) != (departureDateEnd == null)) {
-            throw new IllegalArgumentException(
-                    "Departure date range must have both bounds"
-            );
-        }
-
-        return searchFiltered(
-                originId,
-                destinationId,
-                departureDate,
-                departureDateEnd,
-                originId == null,
-                destinationId == null,
-                departureDate == null
-        );
-    }
-
     @Query("""
         SELECT t
         FROM TripEntity t
@@ -66,14 +43,12 @@ public interface SpringDataTripRepository
         JOIN FETCH v.operator
         WHERE (:skipOrigin = true OR r.origin.id = :originId)
           AND (:skipDestination = true OR r.destination.id = :destinationId)
-          AND (
-              :skipDate = true
-              OR (
-                  t.departureTime >= :departureDate
-                  AND t.departureTime < :departureDateEnd
-              )
-          )
-        ORDER BY t.departureTime ASC
+          AND (:skipDate = true OR t.departureTime >= :departureDate)
+          AND (:skipDate = true OR t.departureTime < :departureDateEnd)
+          AND t.departureTime > :now
+          AND t.status = com.example.busbooking.domain.enums.TripStatus.SCHEDULED
+          AND t.availableSeats > 0
+        ORDER BY t.departureTime ASC, t.id ASC
         """)
     List<TripEntity> searchFiltered(
             @Param("originId") Long originId,
@@ -82,8 +57,28 @@ public interface SpringDataTripRepository
             @Param("departureDateEnd") LocalDateTime departureDateEnd,
             @Param("skipOrigin") boolean skipOrigin,
             @Param("skipDestination") boolean skipDestination,
-            @Param("skipDate") boolean skipDate
+            @Param("skipDate") boolean skipDate,
+            @Param("now") LocalDateTime now,
+            Pageable page
     );
+
+    @Query("""
+        SELECT CASE WHEN COUNT(t) > 0 THEN TRUE ELSE FALSE END FROM TripEntity t
+        WHERE t.vehicleId = :vehicleId AND (:exclude = false OR t.id <> :excludedId)
+          AND t.status <> com.example.busbooking.domain.enums.TripStatus.CANCELLED
+          AND t.departureTime < :arrival AND t.arrivalTime > :departure
+        """)
+    boolean hasOverlappingTrip(Long excludedId, boolean exclude, Long vehicleId,
+                               LocalDateTime departure, LocalDateTime arrival);
+
+    @Modifying
+    @Query(value = """
+        UPDATE trips
+           SET status = CASE WHEN arrival_time <= :now THEN 'COMPLETED' ELSE 'IN_PROGRESS' END
+         WHERE (status = 'SCHEDULED' AND departure_time <= :now)
+            OR (status = 'IN_PROGRESS' AND arrival_time <= :now)
+        """, nativeQuery = true)
+    int advanceLifecycle(LocalDateTime now);
 
     @Query("""
         SELECT t

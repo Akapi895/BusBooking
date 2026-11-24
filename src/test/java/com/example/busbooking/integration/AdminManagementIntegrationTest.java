@@ -79,11 +79,14 @@ class AdminManagementIntegrationTest {
 
     String token(Long id) { return "Bearer " + jwt.issue(id).value(); }
 
+    final LocalDateTime departure = LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))
+            .toLocalDate().plusDays(2).atTime(8, 0);
+
     String body(Long vehicleId) {
         return """
-            {"routeId":%d,"vehicleId":%d,"departureTime":"2026-11-10T08:00:00",
-             "arrivalTime":"2026-11-10T10:00:00","price":150000}
-            """.formatted(route, vehicleId);
+            {"routeId":%d,"vehicleId":%d,"departureTime":"%s:00",
+             "arrivalTime":"%s:00","price":150000}
+            """.formatted(route, vehicleId, departure, departure.plusHours(2));
     }
 
     Long createTrip() throws Exception {
@@ -103,17 +106,50 @@ class AdminManagementIntegrationTest {
                 .andExpect(jsonPath("$[0].vehicle.seatCapacity").value(10));
     }
 
+    @Test void sameVehicleCannotRunOverlappingTripsButMayRunBackToBack() throws Exception {
+        createTrip();
+        mvc.perform(post("/api/admin/trips").header("Authorization", token(admin))
+                        .contentType(APPLICATION_JSON).content(body(vehicle)))
+                .andExpect(status().isConflict());
+        String next = body(vehicle).replace("10:00:00", "12:00:00").replace("08:00:00", "10:00:00");
+        mvc.perform(post("/api/admin/trips").header("Authorization", token(admin))
+                        .contentType(APPLICATION_JSON).content(next))
+                .andExpect(status().isCreated());
+    }
+
+    @Test void aSoldTripKeepsItsDepartureAndArrival() throws Exception {
+        Long id = createTrip();
+        bookings.create(user, id, "Passenger", "0901234567", 1);
+        mvc.perform(put("/api/admin/trips/" + id).header("Authorization", token(admin))
+                        .contentType(APPLICATION_JSON).content(body(vehicle).replace("08:00:00", "08:30:00")))
+                .andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject("SELECT departure_time FROM trips WHERE id = ?", LocalDateTime.class, id))
+                .isEqualTo(departure);
+    }
+
+    @Test void lifecycleCatchesUpAfterMissedDepartureAndArrival() throws Exception {
+        Long id = createTrip();
+        jdbc.update("""
+                UPDATE trips SET departure_time = CURRENT_TIMESTAMP - interval '3 hours',
+                    arrival_time = CURRENT_TIMESTAMP - interval '1 hour' WHERE id = ?
+                """, id);
+        trips.advanceTripLifecycle();
+        assertThat(jdbc.queryForObject("SELECT status FROM trips WHERE id = ?", String.class, id))
+                .isEqualTo("COMPLETED");
+    }
+
     @Test void listIncludesAllStatesAndCombinesOptionalFilters() throws Exception {
         Long id = createTrip();
         jdbc.update("UPDATE trips SET status = 'COMPLETED' WHERE id = ?", id);
-        createTrip();
+        mvc.perform(post("/api/admin/trips").header("Authorization", token(admin))
+                .contentType(APPLICATION_JSON).content(body(insertVehicle(10)))).andExpect(status().isCreated());
         mvc.perform(get("/api/admin/trips").header("Authorization", token(admin)).param("routeId", route.toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
         mvc.perform(get("/api/admin/trips").header("Authorization", token(admin)).param("routeId", route.toString())
-                .param("status", "COMPLETED").param("departureDate", "2026-11-10"))
+                .param("status", "COMPLETED").param("departureDate", departure.toLocalDate().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(id));
         mvc.perform(get("/api/admin/trips").header("Authorization", token(admin)).param("routeId", route.toString())
-                .param("departureDate", "2026-11-11")).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+                .param("departureDate", departure.toLocalDate().plusDays(1).toString())).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
         mvc.perform(get("/api/admin/trips").header("Authorization", token(admin)))
                 .andExpect(status().isOk());
     }
@@ -213,8 +249,8 @@ class AdminManagementIntegrationTest {
     }
 
     SaveTripCommand command(Long vehicleId) {
-        return new SaveTripCommand(route, vehicleId, LocalDateTime.of(2026, 11, 10, 8, 0),
-                LocalDateTime.of(2026, 11, 10, 10, 0), new BigDecimal("150000"));
+        return new SaveTripCommand(route, vehicleId, departure,
+                departure.plusHours(2), new BigDecimal("150000"));
     }
 
     // Hold a real transaction open, then observe the competing PostgreSQL connection waiting on

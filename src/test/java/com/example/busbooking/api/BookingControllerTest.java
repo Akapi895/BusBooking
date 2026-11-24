@@ -33,6 +33,8 @@ class BookingControllerTest {
     @Mock
     private BookingDtoMapper mapper;
 
+    @org.mockito.Spy com.example.busbooking.api.controller.BookingAdmission admission = new com.example.busbooking.api.controller.BookingAdmission(8);
+
     @InjectMocks
     private BookingController bookingController;
 
@@ -54,15 +56,15 @@ class BookingControllerTest {
         when(request.passengerName()).thenReturn("Nguyen Van A");
         when(request.passengerPhone()).thenReturn("0901234567");
         when(request.quantity()).thenReturn(2);
-        when(bookingService.create(7L, 15L, "Nguyen Van A", "0901234567", 2))
+        when(bookingService.create(7L, 15L, "Nguyen Van A", "0901234567", 2, null))
                 .thenReturn(booking);
         when(mapper.toResponse(booking)).thenReturn(response);
 
-        ResponseEntity<BookingResponse> result = bookingController.create(request, auth);
+        ResponseEntity<BookingResponse> result = bookingController.create(request, null, auth);
 
         assertEquals(HttpStatus.CREATED, result.getStatusCode());
         assertSame(response, result.getBody());
-        verify(bookingService).create(7L, 15L, "Nguyen Van A", "0901234567", 2);
+        verify(bookingService).create(7L, 15L, "Nguyen Van A", "0901234567", 2, null);
         verify(mapper).toResponse(booking);
     }
 
@@ -108,14 +110,14 @@ class BookingControllerTest {
         Booking booking2 = mock(Booking.class);
         BookingHistoryResponse response1 = mock(BookingHistoryResponse.class);
         BookingHistoryResponse response2 = mock(BookingHistoryResponse.class);
-        when(bookingService.history(7L)).thenReturn(List.of(booking1, booking2));
+        when(bookingService.history(7L, 0, 20)).thenReturn(List.of(booking1, booking2));
         when(mapper.toHistoryResponse(booking1)).thenReturn(response1);
         when(mapper.toHistoryResponse(booking2)).thenReturn(response2);
 
-        List<BookingHistoryResponse> result = bookingController.history(authentication("7", "ROLE_USER"));
+        List<BookingHistoryResponse> result = bookingController.history(authentication("7", "ROLE_USER"), 0, 20);
 
         assertEquals(List.of(response1, response2), result);
-        verify(bookingService).history(7L);
+        verify(bookingService).history(7L, 0, 20);
     }
 
     @Test
@@ -137,7 +139,7 @@ class BookingControllerTest {
 
         ForbiddenOperationException exception = assertThrows(
                 ForbiddenOperationException.class,
-                () -> bookingController.create(request, auth)
+                () -> bookingController.create(request, null, auth)
         );
 
         assertEquals("Authentication is required", exception.getMessage());

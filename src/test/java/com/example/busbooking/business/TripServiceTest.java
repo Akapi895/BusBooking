@@ -24,6 +24,9 @@ class TripServiceTest {
     @Mock
     private TripRepository tripRepository;
 
+    @org.mockito.Spy java.time.Clock clock = java.time.Clock.fixed(java.time.Instant.parse("2026-01-01T00:00:00Z"), java.time.ZoneOffset.UTC);
+    private final java.time.LocalDateTime now = java.time.LocalDateTime.of(2026, 1, 1, 7, 0);
+
     @InjectMocks
     private TripService tripService;
 
@@ -35,15 +38,15 @@ class TripServiceTest {
         Trip trip = mock(Trip.class);
         List<Trip> expectedTrips = List.of(trip);
 
-        when(tripRepository.search(originId, destinationId, departureDate))
+        when(tripRepository.search(originId, destinationId, departureDate, now, 0, 20))
                 .thenReturn(expectedTrips);
 
         List<Trip> actualTrips = tripService.searchTrips(
-                originId, destinationId, departureDate
+                originId, destinationId, departureDate, 0, 20
         );
 
         assertEquals(expectedTrips, actualTrips);
-        verify(tripRepository).search(originId, destinationId, departureDate);
+        verify(tripRepository).search(originId, destinationId, departureDate, now, 0, 20);
     }
 
     @Test
@@ -52,24 +55,24 @@ class TripServiceTest {
         Long destinationId = 2L;
         LocalDate departureDate = LocalDate.of(2026, 10, 25);
 
-        when(tripRepository.search(originId, destinationId, departureDate))
+        when(tripRepository.search(originId, destinationId, departureDate, now, 0, 20))
                 .thenReturn(List.of());
 
         List<Trip> result = tripService.searchTrips(
-                originId, destinationId, departureDate
+                originId, destinationId, departureDate, 0, 20
         );
 
         assertTrue(result.isEmpty());
-        verify(tripRepository).search(originId, destinationId, departureDate);
+        verify(tripRepository).search(originId, destinationId, departureDate, now, 0, 20);
     }
 
     @Test
     void searchTrips_whenAllFiltersAreNull_shouldDelegateNullsWithoutChangingThem() {
-        when(tripRepository.search(null, null, null)).thenReturn(List.of());
+        when(tripRepository.search(null, null, null, now, 0, 20)).thenReturn(List.of());
 
-        assertTrue(tripService.searchTrips(null, null, null).isEmpty());
+        assertTrue(tripService.searchTrips(null, null, null, 0, 20).isEmpty());
 
-        verify(tripRepository).search(null, null, null);
+        verify(tripRepository).search(null, null, null, now, 0, 20);
         verifyNoMoreInteractions(tripRepository);
     }
 

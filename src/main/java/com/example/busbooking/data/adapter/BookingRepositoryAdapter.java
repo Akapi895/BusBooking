@@ -7,6 +7,8 @@ import com.example.busbooking.data.repository.SpringDataBookingRepository;
 import com.example.busbooking.domain.enums.BookingStatus;
 import com.example.busbooking.domain.model.Booking;
 import org.springframework.stereotype.Component;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,7 +29,13 @@ public class BookingRepositoryAdapter implements BookingRepository {
         return repository.countSeats(tripId, BookingStatus.CONFIRMED);
     }
     public List<Booking> findForAdmin(Long userId, Long tripId, BookingStatus status) {
-        return repository.findForAdmin(userId, tripId, status, userId == null, tripId == null, status == null)
+        return findForAdmin(userId, tripId, status, Pageable.unpaged());
+    }
+    public List<Booking> findForAdmin(Long userId, Long tripId, BookingStatus status, int page, int size) {
+        return findForAdmin(userId, tripId, status, PageRequest.of(page, size));
+    }
+    private List<Booking> findForAdmin(Long userId, Long tripId, BookingStatus status, Pageable page) {
+        return repository.findForAdmin(userId, tripId, status, userId == null, tripId == null, status == null, page)
                 .stream().map(mapper::toDomain).toList();
     }
     public Optional<Booking> findById(Long id) {
@@ -37,7 +45,12 @@ public class BookingRepositoryAdapter implements BookingRepository {
         return repository.findByIdForUpdate(id).map(mapper::toDomain);
     }
     public List<Booking> findByUserId(Long userId) {
-        return repository.findAllByUserIdOrderByBookedAtDesc(userId).stream().map(mapper::toDomain).toList();
+        return repository.findAllByUserIdOrderByBookedAtDescIdDesc(userId, Pageable.unpaged())
+                .stream().map(mapper::toDomain).toList();
+    }
+    public List<Booking> findByUserId(Long userId, int page, int size) {
+        return repository.findAllByUserIdOrderByBookedAtDescIdDesc(userId, PageRequest.of(page, size))
+                .stream().map(mapper::toDomain).toList();
     }
     public Booking updateStatus(Long id, BookingStatus status) {
         repository.updateStatus(id, status);

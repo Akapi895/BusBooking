@@ -2,6 +2,7 @@ package com.example.busbooking.api.controller;
 
 import com.example.busbooking.api.dto.booking.*;
 import com.example.busbooking.api.mapper.BookingDtoMapper;
+import com.example.busbooking.business.command.PageQuery;
 import com.example.busbooking.business.service.BookingService;
 import com.example.busbooking.domain.exception.ForbiddenOperationException;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -18,18 +19,22 @@ import java.util.List;
 public class BookingController {
     private final BookingService bookingService;
     private final BookingDtoMapper mapper;
+    private final BookingAdmission admission;
 
-    public BookingController(BookingService bookingService, BookingDtoMapper mapper) {
+    public BookingController(BookingService bookingService, BookingDtoMapper mapper, BookingAdmission admission) {
         this.bookingService = bookingService;
         this.mapper = mapper;
+        this.admission = admission;
     }
 
     @PostMapping("/bookings")
     public ResponseEntity<BookingResponse> create(@Valid @RequestBody BookingRequest request,
+                                                   @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                                    Authentication authentication) {
         Long userId = userId(authentication);
-        return ResponseEntity.status(201).body(mapper.toResponse(bookingService.create(
-                userId, request.tripId(), request.passengerName(), request.passengerPhone(), request.quantity())));
+        var booking = admission.run(request.tripId(), () -> bookingService.create(
+                userId, request.tripId(), request.passengerName(), request.passengerPhone(), request.quantity(), key));
+        return ResponseEntity.status(201).body(mapper.toResponse(booking));
     }
 
     @GetMapping("/bookings/{bookingId}")
@@ -45,8 +50,11 @@ public class BookingController {
     }
 
     @GetMapping("/users/me/bookings")
-    public List<BookingHistoryResponse> history(Authentication authentication) {
-        return bookingService.history(userId(authentication)).stream()
+    public List<BookingHistoryResponse> history(Authentication authentication,
+                                                @RequestParam(defaultValue = "0") int page,
+                                                @RequestParam(defaultValue = "20") int size) {
+        var pagination = new PageQuery(page, size);
+        return bookingService.history(userId(authentication), pagination.page(), pagination.size()).stream()
                 .map(mapper::toHistoryResponse).toList();
     }
 

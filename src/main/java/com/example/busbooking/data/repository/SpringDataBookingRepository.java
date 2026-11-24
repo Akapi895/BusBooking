@@ -3,6 +3,7 @@ package com.example.busbooking.data.repository;
 import com.example.busbooking.data.entity.BookingEntity;
 import com.example.busbooking.domain.enums.BookingStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
@@ -20,9 +21,9 @@ public interface SpringDataBookingRepository extends JpaRepository<BookingEntity
         ORDER BY b.bookedAt DESC, b.id DESC
         """)
     List<BookingEntity> findForAdmin(Long userId, Long tripId, BookingStatus status,
-                                     boolean skipUser, boolean skipTrip, boolean skipStatus);
+                                     boolean skipUser, boolean skipTrip, boolean skipStatus, Pageable page);
     Optional<BookingEntity> findByIdAndUserId(Long id, Long userId);
-    List<BookingEntity> findAllByUserIdOrderByBookedAtDesc(Long userId);
+    List<BookingEntity> findAllByUserIdOrderByBookedAtDescIdDesc(Long userId, Pageable page);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM BookingEntity b WHERE b.id = :id")

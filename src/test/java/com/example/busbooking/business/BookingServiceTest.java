@@ -40,14 +40,32 @@ class BookingServiceTest {
     @Mock
     private TripRepository tripRepository;
 
+    @org.mockito.Spy java.time.Clock clock = java.time.Clock.fixed(java.time.Instant.parse("2026-01-01T00:00:00Z"), java.time.ZoneOffset.UTC);
+    private final java.time.LocalDateTime future = java.time.LocalDateTime.of(2026, 1, 2, 8, 0);
+
     @InjectMocks
     private BookingService bookingService;
 
     @Test
+    void customerCancellationIsRejectedAtTheThirtyMinuteBoundary() {
+        Booking booking = mock(Booking.class);
+        Trip trip = mock(Trip.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(booking.getUserId()).thenReturn(USER_ID);
+        when(booking.getStatus()).thenReturn(BookingStatus.CONFIRMED);
+        when(booking.getTripId()).thenReturn(TRIP_ID);
+        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getDepartureTime()).thenReturn(java.time.LocalDateTime.of(2026, 1, 1, 7, 30));
+        assertThrows(BusinessException.class, () -> bookingService.cancel(USER_ID, false, BOOKING_ID));
+        verify(tripRepository, never()).updateAvailableSeats(anyLong(), anyInt());
+    }
+
+    @Test
     void create_whenValid_shouldSaveConfirmedBookingAndDecreaseSeats() {
         Trip trip = mock(Trip.class);
-        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(tripRepository.findReservationForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
+        when(trip.getDepartureTime()).thenReturn(future);
         when(trip.getAvailableSeats()).thenReturn(5);
         when(trip.getPrice()).thenReturn(new BigDecimal("150000"));
         when(tripRepository.updateAvailableSeats(TRIP_ID, -2)).thenReturn(true);
@@ -83,7 +101,7 @@ class BookingServiceTest {
 
     @Test
     void create_whenTripDoesNotExist_shouldThrowNotFound() {
-        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.empty());
+        when(tripRepository.findReservationForUpdate(TRIP_ID)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,
                 () -> bookingService.create(USER_ID, TRIP_ID, "A", "0901234567", 1));
@@ -93,7 +111,7 @@ class BookingServiceTest {
     @Test
     void create_whenTripIsNotScheduled_shouldReject() {
         Trip trip = mock(Trip.class);
-        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(tripRepository.findReservationForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getStatus()).thenReturn(TripStatus.CANCELLED);
 
         assertThrows(BusinessException.class,
@@ -105,8 +123,9 @@ class BookingServiceTest {
     @Test
     void create_whenNotEnoughSeats_shouldReject() {
         Trip trip = mock(Trip.class);
-        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(tripRepository.findReservationForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
+        when(trip.getDepartureTime()).thenReturn(future);
         when(trip.getAvailableSeats()).thenReturn(1);
 
         assertThrows(InsufficientSeatsException.class,
@@ -118,8 +137,9 @@ class BookingServiceTest {
     @Test
     void create_whenSeatUpdateFails_shouldRejectWithoutSaving() {
         Trip trip = mock(Trip.class);
-        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(tripRepository.findReservationForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
+        when(trip.getDepartureTime()).thenReturn(future);
         when(trip.getAvailableSeats()).thenReturn(3);
         when(tripRepository.updateAvailableSeats(TRIP_ID, -2)).thenReturn(false);
 
@@ -174,6 +194,7 @@ class BookingServiceTest {
         when(booking.getTripId()).thenReturn(TRIP_ID);
         when(booking.getQuantity()).thenReturn(2);
         when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getDepartureTime()).thenReturn(future);
         when(trip.getAvailableSeats()).thenReturn(3);
         when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 10, "Operator"));
         when(tripRepository.updateAvailableSeats(TRIP_ID, 2)).thenReturn(true);
@@ -223,6 +244,7 @@ class BookingServiceTest {
         when(booking.getTripId()).thenReturn(TRIP_ID);
         when(booking.getQuantity()).thenReturn(2);
         when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getDepartureTime()).thenReturn(future);
         when(trip.getAvailableSeats()).thenReturn(3);
         when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 10, "Operator"));
         when(tripRepository.updateAvailableSeats(TRIP_ID, 2)).thenReturn(false);
@@ -242,6 +264,7 @@ class BookingServiceTest {
         when(booking.getTripId()).thenReturn(TRIP_ID);
         when(booking.getQuantity()).thenReturn(2);
         when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getDepartureTime()).thenReturn(future);
         when(trip.getAvailableSeats()).thenReturn(9);
         when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 10, "Operator"));
 

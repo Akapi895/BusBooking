@@ -25,7 +25,7 @@ public class BookingEntity {
     private int quantity;
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal unitPrice;
-    @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
+    @Column(name = "total_amount", nullable = false, precision = 22, scale = 2)
     private BigDecimal totalAmount;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
