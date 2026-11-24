@@ -26,10 +26,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       TEST_DB_URL: jdbc:postgresql://localhost:5432/busbooking_test
       TEST_DB_USERNAME: busbooking_test
       TEST_DB_PASSWORD: ci-postgres-only
+      TEST_REDIS_PORT: 6379
     steps:
       - uses: actions/checkout@v5
         with:
