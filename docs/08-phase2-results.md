@@ -91,3 +91,14 @@ Dùng `EXPLAIN (ANALYZE, BUFFERS)` trên bộ dữ liệu riêng gồm 50.000 ch
 | Lọc các chuyến tới mốc chuyển trạng thái | `BitmapOr` qua hai partial index | 3,700 → 0,016 ms |
 
 Các thời gian trên là quan sát của từng query plan trên fixture này. Phần benchmark API trước/sau ở trên dùng bản Phase 2 tại `e43c7c5`.
+
+## Lượt chạy thử với một và hai backend
+
+Ngày 25/11/2026, chạy một lượt cho mỗi cấu hình với 160 client cùng đặt một ghế trên chuyến có 40 ghế. Hai lượt dùng cùng JAR, cấu hình mặc định và dữ liệu được tạo lại trên PostgreSQL 16. Với hai backend, client chia yêu cầu luân phiên qua hai cổng loopback.
+
+| Backend | HTTP 201 | HTTP 503 | Ghế còn lại | p95 (ms) | p99 (ms) |
+|---|---:|---:|---:|---:|---:|
+| 1 | 8 | 152 | 32 | 1007,43 | 1174,14 |
+| 2 | 16 | 144 | 24 | 1254,64 | 1325,12 |
+
+Cả hai lượt đều đối soát đúng booking thành công và số ghế. Độ trễ bao gồm phản hồi thành công lẫn phản hồi từ chối có kiểm soát. Mỗi cấu hình mới có một mẫu, dùng để kiểm chứng kịch bản chạy và đối soát trên máy local.

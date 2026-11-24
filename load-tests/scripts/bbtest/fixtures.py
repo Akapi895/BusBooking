@@ -13,7 +13,7 @@ class Fixtures:
         self.password = "AcceptanceA1!" + secrets.token_urlsafe(12)
         self.data = {}
 
-    def prepare(self):
+    def prepare(self, *, snapshot=True):
         f = self.rt.config["fixture"]
         password_hash = bcrypt.hashpw(self.password.encode(), bcrypt.gensalt(rounds=10)).decode()
         with self.rt.connect() as conn:
@@ -51,7 +51,8 @@ class Fixtures:
                                    for tid, route, date in trips],
                          "price": 150000, "setup": "SQL fixture, no claim that bulk users exercised registration"}
         save(self.rt.root / "fixture.json", self.data)
-        self.rt.snapshot()
+        if snapshot:
+            self.rt.snapshot()
         return self.data
 
     def new_user(self, role="USER", verified=True):
