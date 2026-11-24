@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: busbooking_test
+          POSTGRES_USER: busbooking_test
+          POSTGRES_PASSWORD: ci-postgres-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U busbooking_test -d busbooking_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DB_URL: jdbc:postgresql://localhost:5432/busbooking_test
+      TEST_DB_USERNAME: busbooking_test
+      TEST_DB_PASSWORD: ci-postgres-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B verify
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check frontend/app.js
+
+  load-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: load-tests/requirements-kaggle.txt
+      - run: python -m pip install -r load-tests/requirements-kaggle.txt
+      - run: python -B -m unittest discover -s load-tests/tests -v
