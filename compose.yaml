@@ -41,6 +41,7 @@ services:
 
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET_required}
       EMAIL_OTP_SECRET: ${EMAIL_OTP_SECRET:?EMAIL_OTP_SECRET_required}
+      OTP_OUTBOX_SECRET: ${OTP_OUTBOX_SECRET:?OTP_OUTBOX_SECRET_required}
 
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
@@ -51,6 +52,12 @@ services:
       BOOTSTRAP_SUPER_ADMIN_ENABLED: "false"
 
       JAVA_TOOL_OPTIONS: "-Duser.timezone=Asia/Ho_Chi_Minh"
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES: "172[.]31[.]241[.]2"
+
+    networks:
+      default:
+      proxy:
 
     depends_on:
       postgres:
@@ -68,6 +75,9 @@ services:
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
+    networks:
+      proxy:
+        ipv4_address: 172.31.241.2
 
   mailpit:
     image: axllent/mailpit:latest
@@ -78,3 +88,10 @@ services:
 
 volumes:
   busbooking_data:
+
+networks:
+  proxy:
+    ipam:
+      config:
+        - subnet: 172.31.241.0/28
+          ip_range: 172.31.241.8/29

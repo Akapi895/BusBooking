@@ -7,10 +7,11 @@ const time = (v) => (v ? v.replace('T', ' ').slice(0, 16) : '');
 // Demo only: token in sessionStorage is readable by any script on the page.
 let token = sessionStorage.getItem('token');
 
-async function api(path, { method = 'GET', body } = {}) {
+async function api(path, { method = 'GET', body, idempotencyKey } = {}) {
   const headers = {};
   if (body) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = 'Bearer ' + token;
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   const res = await fetch('/api' + path, { method, headers, body: body && JSON.stringify(body) });
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
@@ -61,6 +62,8 @@ async function refreshUser() {
 
 function logout() {
   token = null;
+  pendingBooking = null;
+  bookingPage = 0;
   sessionStorage.removeItem('token');
   refreshUser();
   show('search');
@@ -68,16 +71,35 @@ function logout() {
 $('#logout').addEventListener('click', logout);
 
 // ---------- Search & book ----------
+const pageSize = 20;
+let tripPage = 0;
+let bookingPage = 0;
+let pendingBooking = null;
+let tripRequest = 0;
+let bookingRequest = 0;
+
+function updatePage(prefix, page, count) {
+  $('#' + prefix + '-page').textContent = `Trang ${page + 1}`;
+  $('#' + prefix + '-prev').disabled = page === 0;
+  $('#' + prefix + '-next').disabled = count < pageSize;
+}
+
 async function loadLocations() {
   const locations = await api('/locations').catch(() => []);
   const opts = locations.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   document.querySelectorAll('#search-form select').forEach((s) => s.insertAdjacentHTML('beforeend', opts));
 }
 
-async function loadTrips() {
+async function loadTrips(page = tripPage) {
+  const request = ++tripRequest;
   const params = new URLSearchParams(Object.entries(formData($('#search-form'))).filter(([, v]) => v));
+  params.set('page', page);
+  params.set('size', pageSize);
   try {
     const trips = await api('/trips?' + params);
+    if (request !== tripRequest) return;
+    tripPage = page;
+    updatePage('trip', tripPage, trips.length);
     $('#trips').innerHTML = trips.map((t) => `
       <tr>
         <td>${t.id}</td>
@@ -89,9 +111,16 @@ async function loadTrips() {
         <td>${esc(t.status)}</td>
         <td><button data-book="${t.id}" ${t.status !== 'SCHEDULED' || !t.availableSeats ? 'disabled' : ''}>Đặt</button></td>
       </tr>`).join('') || '<tr><td colspan="8">Không có chuyến nào</td></tr>';
-  } catch (err) { toast(err.message, true); }
+  } catch (err) { if (request === tripRequest) toast(err.message, true); }
 }
-onSubmit($('#search-form'), loadTrips);
+onSubmit($('#search-form'), () => loadTrips(0));
+$('#trip-prev').addEventListener('click', () => loadTrips(tripPage - 1));
+$('#trip-next').addEventListener('click', () => loadTrips(tripPage + 1));
+
+function newBookingKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 $('#trips').addEventListener('click', (e) => {
   const id = e.target.dataset.book;
@@ -107,18 +136,31 @@ $('#book-form').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'ok') return; // "Huỷ" just closes the dialog
   e.preventDefault();
   const d = formData(e.target);
+  const body = { ...d, tripId: +d.tripId, quantity: +d.quantity };
+  const serialized = JSON.stringify(body);
+  if (pendingBooking?.body !== serialized) {
+    pendingBooking = { body: serialized, key: newBookingKey() };
+  }
+  const submit = e.submitter;
+  submit.disabled = true;
   try {
-    const b = await api('/bookings', { method: 'POST', body: { ...d, tripId: +d.tripId, quantity: +d.quantity } });
+    const b = await api('/bookings', { method: 'POST', body, idempotencyKey: pendingBooking.key });
+    pendingBooking = null;
     $('#book-dialog').close();
     toast(`Đặt thành công ${b.bookingCode} · ${money(b.totalAmount)}`);
     loadTrips();
   } catch (err) { toast(err.message, true); }
+  finally { submit.disabled = false; }
 });
 
 // ---------- My bookings ----------
-async function loadBookings() {
+async function loadBookings(page = bookingPage) {
+  const request = ++bookingRequest;
   try {
-    const list = await api('/users/me/bookings');
+    const list = await api(`/users/me/bookings?page=${page}&size=${pageSize}`);
+    if (request !== bookingRequest || !token) return;
+    bookingPage = page;
+    updatePage('booking', bookingPage, list.length);
     $('#bookings').innerHTML = list.map((b) => `
       <tr>
         <td>${esc(b.bookingCode)}</td>
@@ -130,8 +172,10 @@ async function loadBookings() {
         <td>${time(b.bookedAt)}</td>
         <td>${b.status === 'CONFIRMED' ? `<button data-cancel="${b.id}">Huỷ vé</button>` : ''}</td>
       </tr>`).join('') || '<tr><td colspan="8">Chưa có vé nào</td></tr>';
-  } catch (err) { toast(err.message, true); }
+  } catch (err) { if (request === bookingRequest && token) toast(err.message, true); }
 }
+$('#booking-prev').addEventListener('click', () => loadBookings(bookingPage - 1));
+$('#booking-next').addEventListener('click', () => loadBookings(bookingPage + 1));
 
 $('#bookings').addEventListener('click', async (e) => {
   const id = e.target.dataset.cancel;
@@ -151,7 +195,8 @@ onSubmit($('#stress-form'), async ({ tripId, n }) => {
 
   const body = { tripId: +tripId, passengerName: 'Load Test', passengerPhone: '0900000000', quantity: 1 };
   const started = performance.now();
-  const results = await Promise.allSettled(Array.from({ length: +n }, () => api('/bookings', { method: 'POST', body })));
+  const results = await Promise.allSettled(Array.from({ length: +n }, () =>
+    api('/bookings', { method: 'POST', body, idempotencyKey: newBookingKey() })));
   const ms = Math.round(performance.now() - started);
 
   const ok = results.filter((r) => r.status === 'fulfilled').length;
@@ -187,7 +232,7 @@ onSubmit($('#register-form'), async (d, form) => {
   await api('/auth/register', { method: 'POST', body: d });
   $('#verify-form').email.value = d.email;
   form.reset();
-  toast('Đã gửi mã OTP. Mở Mailpit để lấy mã.');
+  toast('Đã tiếp nhận yêu cầu gửi mã OTP. Kiểm tra Mailpit sau vài giây.');
 });
 
 onSubmit($('#verify-form'), async (d, form) => {

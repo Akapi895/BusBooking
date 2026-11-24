@@ -11,7 +11,7 @@ import static org.mockito.Mockito.*;
 
 class AdminBookingServiceTest {
     BookingRepository repository = mock(BookingRepository.class);
-    BookingService service = new BookingService(repository, mock(TripRepository.class));
+    BookingService service = new BookingService(repository, mock(TripRepository.class), null, java.time.Clock.fixed(java.time.Instant.parse("2026-01-01T00:00:00Z"), java.time.ZoneOffset.UTC));
 
     @Test void filtersAreDelegatedAndResultsAreNotRestrictedToCurrentUser() {
         Booking booking = mock(Booking.class);

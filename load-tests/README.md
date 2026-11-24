@@ -1,4 +1,16 @@
-# Kết quả kiểm thử tải Pha 1
+# Kiểm thử BusBooking
+
+## Bộ nghiệm thu kiến trúc mới — chạy độc lập trên Kaggle
+
+- Notebook Run All: [`notebook/busbooking-architecture-acceptance.ipynb`](notebook/busbooking-architecture-acceptance.ipynb).
+- Mặc định `MODE = 'smoke'`: tuần tự auth/business + 3 lượt 1 VU + export. Sau `SMOKE_PASS`, đổi `MODE = 'acceptance'` để chạy đầy đủ. Bootstrap venv không phụ thuộc `ensurepip` của Kaggle.
+- Upload, cấu hình, phạm vi, tiêu chí và cách đọc kết quả: **[`ACCEPTANCE.md`](ACCEPTANCE.md)**.
+- Đóng gói kit sạch: `python -B load-tests/scripts/package_kaggle.py --jar "PATH_TO_EXECUTABLE.jar"` (chạy từ repository root).
+- Bộ mới chạy API/business/security, concurrency/race, rollback/fault/recovery và tải thích nghi không có trần VU cố định. Giữ nguyên JAR/logic ứng dụng; mọi thiếu bằng chứng đều được ghi FAIL/UNKNOWN.
+
+---
+
+# Kết quả kiểm thử tải Pha 1 — artifact lịch sử
 
 **Ngày kiểm thử:** 27/10/2026  
 **Môi trường:** Kaggle Notebook - CPU, không sử dụng GPU  
@@ -101,3 +113,11 @@ Bảng so sánh dùng snapshot CSV, chưa chốt là thống kê cuối lượt 
 **Kết luận:** CSV và console của GET/POST chính thức đều ghi **0 lỗi Locust**; output notebook/booking manifest ghi 0 Trip sai cân bằng ghế trong fixture sau tải. Bộ số liệu là **baseline Pha 1 tham khảo**; trước khi chốt so sánh Pha 2 cần làm rõ mốc CSV–console, phiên bản psutil, nguồn commit và giới hạn bằng chứng tài nguyên nêu trên.
 
 
+
+## So một và hai backend khi tranh ghế
+
+Từ thư mục gốc của repo, build JAR bằng mvn -B -DskipTests package và cài các gói trong load-tests/requirements-kaggle.txt. Dùng một cụm PostgreSQL 16 kiểm thử ở loopback và tài khoản có quyền CREATEDB. Cấp mật khẩu kiểm thử qua biến môi trường PGPASSWORD, sau đó chạy:
+
+    python load-tests/scripts/run_hotspot_scaling.py --jar target/busbooking-0.0.1-SNAPSHOT.jar --output target/hotspot-scaling --clients 160
+
+Mỗi cấu hình khởi động từ một DB riêng với cùng cách sinh dữ liệu và một chuyến có 40 ghế. Client gửi yêu cầu qua các cổng loopback luân phiên khi chạy hai JVM. File summary.json ghi SHA của JAR, p95/p99, số booking mỗi giây, mã phản hồi và kết quả đối soát booking với số ghế. Một lượt chạy chỉ mô tả kịch bản burst trên máy đang đo. Để so sánh ổn định, lặp lại với các thư mục kết quả mới và cùng cấu hình máy.

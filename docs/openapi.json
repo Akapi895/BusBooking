@@ -481,7 +481,22 @@
                 "tags": [
                     "booking-controller"
                 ],
+                "summary": "Book seats on an upcoming trip",
                 "operationId": "create",
+                "parameters": [
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "description": "Optional key scoped to the account for 24 hours",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "pattern": "[!-~]+"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "content": {
                         "application/json": {
@@ -493,8 +508,34 @@
                     "required": true
                 },
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "409": {
+                        "description": "Insufficient seats or idempotency key reused with a different request",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Temporarily unavailable; retry using the same key",
+                        "headers": {
+                            "Retry-After": {
+                                "description": "Retry delay in seconds",
+                                "style": "simple"
+                            }
+                        },
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
                         "content": {
                             "*/*": {
                                 "schema": {
@@ -634,7 +675,7 @@
                         }
                     },
                     "503": {
-                        "description": "SMTP unavailable",
+                        "description": "Verification request temporarily unavailable",
                         "content": {
                             "*/*": {
                                 "schema": {
@@ -661,7 +702,7 @@
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "Register a USER and send an email verification code",
+                "summary": "Register a USER and request an email verification code",
                 "operationId": "register",
                 "requestBody": {
                     "content": {
@@ -685,7 +726,7 @@
                         }
                     },
                     "503": {
-                        "description": "SMTP unavailable; account remains pending",
+                        "description": "Verification request temporarily unavailable",
                         "content": {
                             "*/*": {
                                 "schema": {
@@ -1259,6 +1300,28 @@
                     "booking-controller"
                 ],
                 "operationId": "history",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 0
+                        }
+                    },
+                    {
+                        "name": "size",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 20
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1313,6 +1376,26 @@
                         "schema": {
                             "type": "string",
                             "format": "date"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 0
+                        }
+                    },
+                    {
+                        "name": "size",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 20
                         }
                     }
                 ],
@@ -1560,6 +1643,26 @@
                                 "CONFIRMED",
                                 "CANCELLED"
                             ]
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 0
+                        }
+                    },
+                    {
+                        "name": "size",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 20
                         }
                     }
                 ],
@@ -2152,11 +2255,13 @@
                     },
                     "passengerName": {
                         "type": "string",
-                        "minLength": 1
+                        "maxLength": 100,
+                        "minLength": 0
                     },
                     "passengerPhone": {
                         "type": "string",
-                        "minLength": 1
+                        "maxLength": 20,
+                        "minLength": 0
                     },
                     "quantity": {
                         "type": "integer",

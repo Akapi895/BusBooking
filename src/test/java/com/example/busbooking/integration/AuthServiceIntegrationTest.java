@@ -245,6 +245,7 @@ class AuthServiceIntegrationTest {
     void concurrentRegistrationCreatesExactlyOneAccountAndOneMail() throws Exception {
         CyclicBarrier bothChecked = new CyclicBarrier(2);
         UserRepository synchronizedUsers = new UserRepository() {
+            public Optional<Principal> findActiveVerifiedPrincipal(Long id) { return users.findActiveVerifiedPrincipal(id); }
             public Optional<User> findById(Long id) { return users.findById(id); }
             public Optional<User> findByEmail(String email) { return users.findByEmail(email); }
             public User save(User user) { return users.save(user); }

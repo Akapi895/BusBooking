@@ -32,6 +32,11 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    public Optional<Principal> findActiveVerifiedPrincipal(Long id) {
+        return repository.findActiveVerifiedPrincipal(id);
+    }
+
+    @Override
     public Optional<User> findById(Long id) {
         return repository.findById(id).map(mapper::toDomain);
     }

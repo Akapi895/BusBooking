@@ -17,10 +17,10 @@ public final class AuthRateLimitFilter extends OncePerRequestFilter {
                 String path = "/api/auth/" + name;
                 return new Endpoint(path, PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, path));
             }).toList();
-    private final AuthRequestRateLimiter limiter;
+    private final AuthRateLimiter limiter;
     private final ApiErrorWriter errors;
 
-    public AuthRateLimitFilter(AuthRequestRateLimiter limiter, ApiErrorWriter errors) {
+    public AuthRateLimitFilter(AuthRateLimiter limiter, ApiErrorWriter errors) {
         this.limiter = limiter;
         this.errors = errors;
     }
@@ -30,8 +30,15 @@ public final class AuthRateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         for (Endpoint endpoint : ENDPOINTS) {
             if (!endpoint.matcher().matches(request)) { continue; }
-            // Only the connection's remote address is trusted, never client Forwarded/X-Forwarded-For.
-            var decision = limiter.consume(request.getRemoteAddr(), endpoint.path());
+            // Tomcat can resolve the client address when the deployment configures a trusted proxy.
+            AuthRateLimiter.Decision decision;
+            try {
+                decision = limiter.consume(request.getRemoteAddr(), endpoint.path());
+            } catch (AuthRateLimitUnavailableException failure) {
+                response.setHeader(HttpHeaders.RETRY_AFTER, "1");
+                errors.write(request, response, 503, "SERVICE_UNAVAILABLE", "Please retry shortly");
+                return;
+            }
             if (!decision.allowed()) {
                 response.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(decision.retryAfterSeconds()));
                 errors.write(request, response, 429, "RATE_LIMITED", "Too many requests; please try again later");

@@ -58,7 +58,7 @@ Các mã **FR** mô tả khả năng nghiệp vụ, **không tương ứng một
 
 **FR-02 - Xác minh email bằng OTP.** Sau đăng ký, hệ thống gửi mã OTP qua email. Người dùng xác minh bằng email và mã OTP hợp lệ trước khi được đăng nhập. OTP không được trả về trong phản hồi API.
 
-**FR-03 - Gửi lại OTP.** Người dùng chưa xác minh email có thể yêu cầu gửi mã mới. Việc gửi lại chịu giới hạn tần suất; mã mới thay thế mã cũ.
+**FR-03 - Gửi lại OTP.** Người dùng chưa xác minh email có thể yêu cầu gửi mã mới. Yêu cầu vào hàng đợi và chịu giới hạn tần suất. Mã mới thay thế mã cũ sau khi SMTP chấp nhận email và worker ghi nhận phát thành công.
 
 **FR-04 - Đăng nhập và cấp JWT.** Người dùng đăng nhập bằng email và mật khẩu. Chỉ tài khoản `ACTIVE`, đã xác minh email mới được cấp JWT để truy cập endpoint được bảo vệ.
 
@@ -72,7 +72,7 @@ Các mã **FR** mô tả khả năng nghiệp vụ, **không tương ứng một
 
 **FR-08 - Tra cứu địa điểm công khai.** Khách truy cập có thể lấy danh sách địa điểm và sử dụng điều kiện tìm kiếm được hỗ trợ để xác định điểm đi/điểm đến.
 
-**FR-09 - Tìm kiếm chuyến xe.** Khách truy cập có thể lọc chuyến theo điểm đi, điểm đến và ngày khởi hành thông qua API tìm kiếm công khai.
+**FR-09 - Tìm kiếm chuyến xe.** Khách truy cập có thể lọc chuyến theo điểm đi, điểm đến và ngày khởi hành. Kết quả là danh sách phân trang gồm các chuyến còn ghế và chưa khởi hành.
 
 **FR-10 - Xem chi tiết chuyến.** Hệ thống cung cấp thông tin chuyến, tuyến đường, nhà xe/phương tiện (theo dữ liệu phản hồi API), giờ khởi hành/đến, giá vé, số ghế còn trống và trạng thái.
 
@@ -84,7 +84,7 @@ Các mã **FR** mô tả khả năng nghiệp vụ, **không tương ứng một
 
 **FR-13 - Xem booking.** `USER` xem danh sách booking của mình và thông tin chi tiết booking được phép truy cập. `ADMIN`/`SUPER_ADMIN` được xem booking theo phạm vi quản trị.
 
-**FR-14 - Hủy booking.** Chủ booking hoặc `ADMIN`/`SUPER_ADMIN` được hủy booking chưa `CANCELLED` khi ghế có thể hoàn mà không vượt capacity xe; cập nhật trạng thái và hoàn ghế trong cùng giao dịch. Hiện chưa có hạn hủy theo giờ khởi hành hoặc trạng thái Trip; hủy lặp trả `400 BUSINESS_ERROR`.
+**FR-14 - Hủy booking.** Chủ booking được hủy khi còn hơn 30 phút trước giờ đi. `ADMIN`/`SUPER_ADMIN` có thể hủy sau mốc này. Hệ thống cập nhật trạng thái và hoàn ghế trong cùng transaction, với điều kiện booking chưa bị hủy và số ghế hoàn nằm trong sức chứa.
 
 ### 1.4.4. Quản trị danh mục và vận hành
 
@@ -112,15 +112,17 @@ Các mã **FR** mô tả khả năng nghiệp vụ, **không tương ứng một
 | **BR-06** | Nhà xe, phương tiện, tuyến đường và chuyến phải tham chiếu dữ liệu hợp lệ; việc đổi trạng thái hoặc định danh có thể bị từ chối khi dữ liệu đang được sử dụng. |
 | **BR-07** | Tuyến đường không được có điểm đi trùng điểm đến; cặp `(điểm đi, điểm đến)` có hướng phải tuân thủ ràng buộc duy nhất của hệ thống. |
 | **BR-08** | Sức chứa phương tiện phải lớn hơn 0; chuyến xe có tuyến đường, phương tiện, thời gian và giá vé hợp lệ. |
-| **BR-09** | Booking chỉ được tạo cho Trip tồn tại, trạng thái `SCHEDULED`, quantity > 0 và đủ ghế; hiện chưa kiểm tra thời điểm khởi hành, nên Trip quá giờ nhưng còn `SCHEDULED` vẫn có thể được đặt. |
+| **BR-09** | Đặt vé cần chuyến `SCHEDULED`, giờ đi trong tương lai, số lượng vé dương và đủ ghế. |
 | **BR-10** | Tạo booking và cập nhật số ghế phải nhất quán trong cùng giao dịch, kể cả khi có yêu cầu đồng thời. |
 | **BR-11** | Booking lưu `unitPrice` và `totalAmount` tại thời điểm đặt, không tự động đổi theo giá Trip sau đó. |
-| **BR-12** | Hủy booking phải có quyền truy cập, booking chưa `CANCELLED` và hoàn ghế không vượt capacity; cập nhật trạng thái/ghế nguyên tử. Hủy lặp trả `400 BUSINESS_ERROR`, không hoàn ghế thêm; chưa có cutoff theo thời gian/trạng thái Trip. |
-| **BR-13** | Hủy Trip ở Pha 1 là hủy mềm; chỉ cho hủy Trip `SCHEDULED` không có booking `CONFIRMED`. Không tự động hoàn tiền hoặc hủy hàng loạt booking. |
+| **BR-12** | Chủ booking chỉ được hủy trước giờ đi hơn 30 phút. Quản trị được bỏ qua mốc thời gian. Hủy lặp trả `400 BUSINESS_ERROR`. |
+| **BR-13** | Hủy chuyến là chuyển trạng thái sang `CANCELLED`. Chuyến phải còn `SCHEDULED`, chưa khởi hành và không còn booking `CONFIRMED`. |
 | **BR-14** | Không xóa vật lý nhà xe, địa điểm, phương tiện và tuyến đường qua API quản trị Pha 1. |
 | **BR-15** | Chức năng đăng ký công khai không cho phép tự chỉ định role `ADMIN` hay `SUPER_ADMIN`; API quản lý role không cấp `SUPER_ADMIN`. |
+| **BR-16** | Trong 24 giờ, cùng tài khoản và cùng `Idempotency-Key` trả lại booking gốc nếu nội dung trùng, hoặc trả lỗi nếu nội dung thay đổi. |
+| **BR-17** | Hai chuyến chưa hủy trên cùng xe không được chồng giờ. Chuyến có booking `CONFIRMED` giữ tuyến và giờ đã bán. |
 
-> Các quy tắc nêu trên mô tả hợp đồng nghiệp vụ Pha 1 được ghi nhận trong tài liệu dự án. Chi tiết giới hạn field, mã HTTP và trạng thái được chuẩn hóa ở [`04-api-design.md`](04-api-design.md) và đặc tả OpenAPI xuất từ ứng dụng.
+Xem giới hạn trường và mã HTTP trong [đặc tả API](04-api-design.md).
 
 ## 1.6. Luồng nghiệp vụ chính (Business Flows)
 
@@ -131,8 +133,8 @@ Các mã **FR** mô tả khả năng nghiệp vụ, **không tương ứng một
 flowchart TD
     A[Nhập thông tin đăng ký] --> B{Dữ liệu hợp lệ, email chưa tồn tại?}
     B -- Không --> X[Trả lỗi đăng ký]
-    B -- Có --> C[Tạo USER chưa xác minh]
-    C --> D[Gửi OTP qua SMTP]
+    B -- Có --> C[Tạo USER và ghi OTP đã mã hóa vào outbox]
+    C --> D[Worker gửi OTP qua SMTP]
     D --> E[Nhập OTP hoặc yêu cầu gửi lại]
     E --> F{OTP hợp lệ và còn hạn?}
     F -- Không --> E
@@ -143,7 +145,7 @@ flowchart TD
     I -- Có --> J[Cấp JWT]
 ```
 
-Trường hợp gửi email thất bại, tài khoản có thể đã được tạo nhưng chưa xác minh; người dùng sử dụng chức năng gửi lại OTP theo quy tắc giới hạn tần suất.
+Khi SMTP tạm lỗi, worker tiếp tục thử gửi yêu cầu trong outbox. Người dùng vẫn có thể yêu cầu mã khác theo quy tắc giới hạn tần suất.
 
 ### BF-02 - Tìm kiếm chuyến xe
 

@@ -36,8 +36,7 @@ class JwtAuthenticationFilterTest {
 
     @BeforeEach
     void setupUser() {
-        when(repository.findById(42L)).thenReturn(Optional.of(new User(42L, "Hoang", "hoang@example.com",
-                "hash-fixture", "0901234567", new Role(1L, RoleName.USER), UserStatus.ACTIVE, true, null, null)));
+        when(repository.findActiveVerifiedPrincipal(42L)).thenReturn(Optional.of(new UserRepository.Principal(42L, "hoang@example.com", RoleName.USER)));
     }
 
     @Test
@@ -100,7 +99,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void missingUserBecomes401WithoutReachingController() throws Exception {
-        when(repository.findById(42L)).thenReturn(Optional.empty());
+        when(repository.findActiveVerifiedPrincipal(42L)).thenReturn(Optional.empty());
         var response = new MockHttpServletResponse();
         filter.doFilter(request("Bearer " + jwt.issue(42L).value()), response,
                 (req, res) -> { throw new AssertionError("Controller was called"); });
@@ -122,7 +121,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void databaseErrorsArePropagatedWithoutCallingEntryPoint() {
-        when(repository.findById(42L)).thenThrow(new IllegalStateException("database unavailable"));
+        when(repository.findActiveVerifiedPrincipal(42L)).thenThrow(new IllegalStateException("database unavailable"));
         assertThatThrownBy(() -> filter.doFilter(request("Bearer " + jwt.issue(42L).value()), new MockHttpServletResponse(),
                 (req, res) -> { throw new AssertionError("Controller was called"); }))
                 .isInstanceOf(IllegalStateException.class).hasMessage("database unavailable");
@@ -151,7 +150,7 @@ class JwtAuthenticationFilterTest {
         filter.doFilter(request, response, (req, res) -> filter.doFilter(req, res, (nestedReq, nestedRes) -> {
             assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         }));
-        verify(repository, times(1)).findById(42L);
+        verify(repository, times(1)).findActiveVerifiedPrincipal(42L);
     }
 
     private MockHttpServletRequest request(String header) {

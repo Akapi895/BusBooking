@@ -1,0 +1,1 @@
+ALTER TABLE bookings ALTER COLUMN total_amount TYPE NUMERIC(22,2);

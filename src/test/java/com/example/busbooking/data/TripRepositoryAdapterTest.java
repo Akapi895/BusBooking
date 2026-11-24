@@ -29,28 +29,30 @@ class TripRepositoryAdapterTest {
     @Mock
     private Trip trip;
 
+    private final java.time.LocalDateTime now = LocalDate.of(2026, 10, 24).atStartOfDay();
+
     @Test
-    void search_withoutDatePassesBothDateBoundsAsNull() {
-        when(repository.search(null, 2L, null, null)).thenReturn(List.of());
-        TripRepositoryAdapter adapter = new TripRepositoryAdapter(repository, mapper);
+    void search_withoutDateSkipsBothDateBounds() {
+        when(repository.searchFiltered(null, 2L, now, now, true, false, true, now, org.springframework.data.domain.PageRequest.of(0, 20))).thenReturn(List.of());
+        TripRepositoryAdapter adapter = new TripRepositoryAdapter(repository, mapper, mock(org.springframework.jdbc.core.JdbcTemplate.class));
 
-        assertEquals(List.of(), adapter.search(null, 2L, null));
+        assertEquals(List.of(), adapter.search(null, 2L, null, now, 0, 20));
 
-        verify(repository).search(null, 2L, null, null);
+        verify(repository).searchFiltered(null, 2L, now, now, true, false, true, now, org.springframework.data.domain.PageRequest.of(0, 20));
         verifyNoInteractions(mapper);
     }
 
     @Test
     void search_withDateUsesHalfOpenWholeDayRange() {
         TripEntity entity = mock(TripEntity.class);
-        when(repository.search(eq(1L), eq(2L),
-                eq(LocalDate.of(2026, 10, 25).atStartOfDay()),
-                eq(LocalDate.of(2026, 10, 26).atStartOfDay())))
+        when(repository.searchFiltered(1L, 2L, LocalDate.of(2026, 10, 25).atStartOfDay(),
+                LocalDate.of(2026, 10, 26).atStartOfDay(), false, false, false, now,
+                org.springframework.data.domain.PageRequest.of(0, 20)))
                 .thenReturn(List.of(entity));
         when(mapper.toDomain(entity)).thenReturn(trip);
-        TripRepositoryAdapter adapter = new TripRepositoryAdapter(repository, mapper);
+        TripRepositoryAdapter adapter = new TripRepositoryAdapter(repository, mapper, mock(org.springframework.jdbc.core.JdbcTemplate.class));
 
-        assertEquals(List.of(trip), adapter.search(1L, 2L, LocalDate.of(2026, 10, 25)));
+        assertEquals(List.of(trip), adapter.search(1L, 2L, LocalDate.of(2026, 10, 25), now, 0, 20));
 
         verify(mapper).toDomain(entity);
     }

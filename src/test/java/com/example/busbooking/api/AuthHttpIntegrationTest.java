@@ -305,7 +305,8 @@ class AuthHttpIntegrationTest {
         assertThat(context.getBeansOfType(AuthRateLimitFilter.class)).isEmpty();
         String token = verifiedToken();
         me(token).andExpect(status().isOk());
-        verify(users, times(2)).findById(anyLong()); // JWT loader and current-user query, once each.
+        verify(users).findActiveVerifiedPrincipal(anyLong());
+        verify(users).findById(anyLong());
         mvc.perform(get("/api/auth/me")).andExpect(status().isUnauthorized());
     }
 

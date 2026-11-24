@@ -2,6 +2,7 @@ package com.example.busbooking.api.controller;
 
 import com.example.busbooking.api.dto.trip.TripResponse;
 import com.example.busbooking.api.mapper.TripDtoMapper;
+import com.example.busbooking.business.command.PageQuery;
 import com.example.busbooking.business.service.TripService;
 import com.example.busbooking.domain.model.Trip;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -31,10 +32,13 @@ public class TripController {
             @RequestParam(required = false) Long destinationId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate departureDate) {
+            LocalDate departureDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
 
+        var pagination = new PageQuery(page, size);
         List<TripResponse> responses = tripService
-                .searchTrips(originId, destinationId, departureDate)
+                .searchTrips(originId, destinationId, departureDate, pagination.page(), pagination.size())
                 .stream()
                 .map(tripDtoMapper::toResponse)
                 .toList();

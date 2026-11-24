@@ -22,6 +22,7 @@ class AdminTripServiceTest {
     @Mock RouteRepository routes;
     @Mock VehicleRepository vehicles;
     @Mock BookingRepository bookings;
+    @Spy java.time.Clock clock = java.time.Clock.fixed(java.time.Instant.parse("2026-01-01T00:00:00Z"), java.time.ZoneOffset.UTC);
     @InjectMocks TripService service;
     final LocalDateTime departure = LocalDateTime.of(2026, 11, 10, 8, 0);
 

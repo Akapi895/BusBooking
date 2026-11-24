@@ -12,9 +12,11 @@ import com.example.busbooking.domain.exception.TripConflictException;
 import com.example.busbooking.domain.exception.ResourceNotFoundException;
 import com.example.busbooking.domain.model.Trip;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.Clock;
 import java.util.List;
 
 @Service
@@ -24,13 +26,15 @@ public class TripService {
     private final RouteRepository routeRepository;
     private final VehicleRepository vehicleRepository;
     private final BookingRepository bookingRepository;
+    private final Clock clock;
 
     public TripService(TripRepository tripRepository, RouteRepository routeRepository,
-                       VehicleRepository vehicleRepository, BookingRepository bookingRepository) {
+                       VehicleRepository vehicleRepository, BookingRepository bookingRepository, Clock clock) {
         this.tripRepository = tripRepository;
         this.routeRepository = routeRepository;
         this.vehicleRepository = vehicleRepository;
         this.bookingRepository = bookingRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -41,6 +45,7 @@ public class TripService {
     @Transactional
     public Trip create(SaveTripCommand command) {
         Vehicle vehicle = validate(command);
+        requireAvailableVehicle(null, command);
         return tripRepository.save(new Trip(null, command.routeId(), command.vehicleId(),
                 command.departureTime(), command.arrivalTime(), command.price(),
                 vehicle.seatCapacity(), TripStatus.SCHEDULED));
@@ -51,10 +56,18 @@ public class TripService {
         Trip current = lockedTrip(tripId);
         requireScheduled(current);
         Vehicle vehicle = validate(command);
+        boolean itineraryChanged = !current.getRouteId().equals(command.routeId())
+                || !current.getDepartureTime().equals(command.departureTime())
+                || !current.getArrivalTime().equals(command.arrivalTime());
+        boolean vehicleChanged = !current.getVehicleId().equals(command.vehicleId());
+        long confirmedSeats = itineraryChanged || vehicleChanged ? bookingRepository.countConfirmedSeats(tripId) : 0;
+        if (itineraryChanged && confirmedSeats > 0) {
+            throw new TripConflictException("The route and times cannot change after seats have been booked");
+        }
+        if (itineraryChanged || vehicleChanged) requireAvailableVehicle(tripId, command);
         int availableSeats = current.getAvailableSeats();
-        if (!current.getVehicleId().equals(command.vehicleId())) {
+        if (vehicleChanged) {
             // Booking creation/cancellation takes this same trip lock before changing seats/status.
-            long confirmedSeats = bookingRepository.countConfirmedSeats(tripId);
             if (confirmedSeats > vehicle.seatCapacity()) {
                 throw new TripConflictException("Vehicle capacity is smaller than confirmed booked seats");
             }
@@ -84,9 +97,22 @@ public class TripService {
     }
 
     private void requireScheduled(Trip trip) {
-        if (trip.getStatus() != TripStatus.SCHEDULED) {
+        if (trip.getStatus() != TripStatus.SCHEDULED || !trip.getDepartureTime().isAfter(TravelTime.now(clock))) {
             throw new TripConflictException("Only scheduled trips can be changed or cancelled");
         }
+    }
+
+    private void requireAvailableVehicle(Long tripId, SaveTripCommand command) {
+        if (tripRepository.hasOverlappingTrip(tripId, command.vehicleId(), command.departureTime(), command.arrivalTime())) {
+            throw new TripConflictException("Vehicle is assigned to an overlapping trip");
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${booking.lifecycle.interval-ms:30000}")
+    @Transactional
+    public void advanceTripLifecycle() {
+        var now = TravelTime.now(clock);
+        tripRepository.advanceLifecycle(now);
     }
 
     private Vehicle validate(SaveTripCommand command) {
@@ -114,12 +140,12 @@ public class TripService {
     public List<Trip> searchTrips(
             Long originId,
             Long destinationId,
-            LocalDate departureDate) {
+            LocalDate departureDate, int page, int size) {
 
         return tripRepository.search(
                 originId,
                 destinationId,
-                departureDate
+                departureDate, TravelTime.now(clock), page, size
         );
     }
 

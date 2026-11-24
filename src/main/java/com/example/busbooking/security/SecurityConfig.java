@@ -6,6 +6,7 @@ import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.*;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -21,13 +22,17 @@ import java.util.*;
 @EnableConfigurationProperties(AuthRateLimitProperties.class)
 public class SecurityConfig {
     @Bean
-    public AuthRequestRateLimiter authRequestRateLimiter(AuthRateLimitProperties properties, Clock clock) {
-        return new AuthRequestRateLimiter(properties, clock);
+    public AuthRateLimiter authRequestRateLimiter(AuthRateLimitProperties properties, Clock clock,
+                                                  StringRedisTemplate redis) {
+        return switch (properties.getBackend()) {
+            case LOCAL -> new AuthRequestRateLimiter(properties, clock);
+            case REDIS -> new RedisAuthRateLimiter(redis, properties);
+        };
     }
 
     @Bean
     public SecurityFilterChain apiSecurity(HttpSecurity http, JwtService jwt, CurrentUserLoader users,
-            ApiErrorWriter errors, AuthRequestRateLimiter limiter,
+            ApiErrorWriter errors, AuthRateLimiter limiter,
             @Value("${springdoc.api-docs.enabled:false}") boolean docsEnabled,
             @Value("${auth.cors.allowed-origins:}") List<String> allowedOrigins) throws Exception {
         var entryPoint = new JsonAuthenticationEntryPoint(errors);
@@ -43,7 +48,7 @@ public class SecurityConfig {
         }
         cors.setAllowedOrigins(origins);
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key"));
         cors.setExposedHeaders(List.of("Retry-After"));
         cors.setAllowCredentials(false);
         cors.setMaxAge(600L);

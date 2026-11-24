@@ -35,13 +35,18 @@
       <thead><tr><th>#</th><th>Tuyến</th><th>Nhà xe</th><th>Khởi hành</th><th>Giá</th><th>Còn</th><th>Trạng thái</th><th></th></tr></thead>
       <tbody id="trips"></tbody>
     </table>
+    <div class="row">
+      <button id="trip-prev" disabled>Trang trước</button>
+      <span id="trip-page" aria-live="polite">Trang 1</span>
+      <button id="trip-next" disabled>Trang sau</button>
+    </div>
 
     <dialog id="book-dialog">
       <form id="book-form" method="dialog">
         <h3>Đặt vé chuyến #<span id="book-trip"></span></h3>
         <input type="hidden" name="tripId">
-        <label>Tên hành khách <input name="passengerName" required></label>
-        <label>SĐT <input name="passengerPhone" required></label>
+        <label>Tên hành khách <input name="passengerName" maxlength="100" required></label>
+        <label>SĐT <input name="passengerPhone" type="tel" maxlength="20" required></label>
         <label>Số ghế <input type="number" name="quantity" min="1" value="1" required></label>
         <div class="row">
           <button value="cancel" formnovalidate>Huỷ</button>
@@ -58,6 +63,11 @@
       <thead><tr><th>Mã</th><th>Chuyến</th><th>Hành khách</th><th>Số ghế</th><th>Tổng</th><th>Trạng thái</th><th>Đặt lúc</th><th></th></tr></thead>
       <tbody id="bookings"></tbody>
     </table>
+    <div class="row">
+      <button id="booking-prev" disabled>Trang trước</button>
+      <span id="booking-page" aria-live="polite">Trang 1</span>
+      <button id="booking-next" disabled>Trang sau</button>
+    </div>
   </section>
 
   <!-- Concurrency demo -->

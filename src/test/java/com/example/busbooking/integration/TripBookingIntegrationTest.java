@@ -49,6 +49,7 @@ class TripBookingIntegrationTest {
     private Long routeId;
     private Long vehicleId;
     private Long tripId;
+    private final java.time.LocalDate day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(2);
 
     @BeforeEach
     void seed() {
@@ -72,7 +73,7 @@ class TripBookingIntegrationTest {
                 INSERT INTO vehicles (operator_id, license_plate, vehicle_type, seat_capacity, status)
                 VALUES (?, ?, 'SLEEPER', 10, 'ACTIVE') RETURNING id
                 """, Long.class, operatorId, ("T-" + suffix.substring(0, Math.min(17, suffix.length()))).toUpperCase());
-        tripId = insertTrip(LocalDateTime.of(2026, 10, 25, 8, 0), 4, "SCHEDULED");
+        tripId = insertTrip(day.atTime(8, 0), 4, "SCHEDULED");
     }
 
     @AfterEach
@@ -89,17 +90,17 @@ class TripBookingIntegrationTest {
     @Test
     @Order(1)
     void tripSearchSupportsFiltersWholeDateAndDetailedResponse() throws Exception {
-        insertTrip(LocalDateTime.of(2026, 10, 25, 23, 59), 3, "SCHEDULED");
-        insertTrip(LocalDateTime.of(2026, 10, 26, 0, 0), 2, "SCHEDULED");
+        insertTrip(day.atTime(23, 59), 3, "SCHEDULED");
+        insertTrip(day.plusDays(1).atTime(1, 59), 2, "SCHEDULED");
 
         MvcResult result = mvc.perform(get("/api/trips")
                         .param("originId", originId.toString())
                         .param("destinationId", destinationId.toString())
-                        .param("departureDate", "2026-10-25"))
+                        .param("departureDate", day.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].departureTime").value("2026-10-25T08:00:00"))
-                .andExpect(jsonPath("$[1].departureTime").value("2026-10-25T23:59:00"))
+                .andExpect(jsonPath("$[0].departureTime").value(day + "T08:00:00"))
+                .andExpect(jsonPath("$[1].departureTime").value(day + "T23:59:00"))
                 .andExpect(jsonPath("$[0].route.origin").value(org.hamcrest.Matchers.startsWith("Origin " + fixture)))
                 .andExpect(jsonPath("$[0].route.destination").value(org.hamcrest.Matchers.startsWith("Destination " + fixture)))
                 .andExpect(jsonPath("$[0].vehicle.vehicleType").value("SLEEPER"))
@@ -160,7 +161,34 @@ class TripBookingIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
         assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
         mvc.perform(delete("/api/bookings/" + booking.id()).header("Authorization", "Bearer " + token))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("BUSINESS_ERROR"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(booking.id()))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mvc.perform(delete("/api/bookings/" + booking.id())
+                        .header("Authorization", "Bearer " + jwt.issue(otherUserId).value()))
+                .andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
+    }
+
+    @Test
+    void simultaneousCancellationRetriesRestoreSeatsOnlyOnce() throws Exception {
+        var booking = bookingService.create(userId, tripId, "Cancellation Retry", "0901234567", 2, null);
+        String token = jwt.issue(userId).value();
+        var ready = new CyclicBarrier(2);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Callable<Void> cancel = () -> {
+                ready.await(5, TimeUnit.SECONDS);
+                mvc.perform(delete("/api/bookings/" + booking.getId()).header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value("CANCELLED"));
+                return null;
+            };
+            var first = pool.submit(cancel);
+            var second = pool.submit(cancel);
+            first.get(20, TimeUnit.SECONDS);
+            second.get(20, TimeUnit.SECONDS);
+        }
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
     }
 
     @Test
@@ -214,10 +242,10 @@ class TripBookingIntegrationTest {
 
     @Test
     @Order(6)
-    void bookingSaveFailureRollsBackSeatReservation() {
+    void invalidPassengerIsRejectedBeforeReservingSeats() {
         assertThatThrownBy(() -> bookingService.create(
                 userId, tripId, " ", "0901234567", 1))
-                .isInstanceOf(DataIntegrityViolationException.class);
+                .isInstanceOf(com.example.busbooking.domain.exception.InvalidAuthInputException.class);
 
         assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId))
                 .isEqualTo(4);
@@ -225,8 +253,57 @@ class TripBookingIntegrationTest {
                 .isZero();
     }
 
+    @Test
+    void bookingInsertFailureRollsBackSeatReservation() {
+        assertThatThrownBy(() -> bookingService.create(
+                Long.MAX_VALUE, tripId, "Test Passenger", "0901234567", 1))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bookings WHERE trip_id = ?", Long.class, tripId)).isZero();
+    }
+
     private Long roleId(String name) {
         return jdbc.queryForObject("SELECT id FROM roles WHERE name = ?", Long.class, name);
+    }
+
+    @Test
+    void concurrentRetriesReturnTheOriginalBookingAndRejectDifferentPayload() throws Exception {
+        String body = """
+                {"tripId":%d,"passengerName":"Retry","passengerPhone":"0901234567","quantity":1}
+                """.formatted(tripId);
+        String token = "Bearer " + jwt.issue(userId).value();
+        Callable<Long> request = () -> {
+            var response = mvc.perform(post("/api/bookings").header("Authorization", token)
+                            .header("Idempotency-Key", "retry").contentType(APPLICATION_JSON).content(body))
+                    .andExpect(status().isCreated()).andReturn();
+            return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
+        };
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(request);
+            var second = pool.submit(request);
+            assertThat(first.get(15, TimeUnit.SECONDS)).isEqualTo(second.get(15, TimeUnit.SECONDS));
+        }
+        mvc.perform(post("/api/bookings").header("Authorization", token)
+                        .header("Idempotency-Key", "retry").contentType(APPLICATION_JSON)
+                        .content(body.replace("Retry", "Other request")))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error").value("IDEMPOTENCY_CONFLICT"));
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId))
+                .isEqualTo(3);
+    }
+
+    @Test
+    void pastTripsAreHiddenAndCannotBeBooked() throws Exception {
+        Long past = insertTrip(day.minusDays(30).atTime(8, 0), 4, "SCHEDULED");
+        mvc.perform(get("/api/trips").param("originId", originId.toString()).param("size", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(tripId));
+        mvc.perform(get("/api/trips").param("originId", originId.toString()).param("page", "1").param("size", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post("/api/bookings").header("Authorization", "Bearer " + jwt.issue(userId).value())
+                        .contentType(APPLICATION_JSON).content("""
+                            {"tripId":%d,"passengerName":"Passenger","passengerPhone":"0901234567","quantity":1}
+                            """.formatted(past)))
+                .andExpect(status().isBadRequest());
     }
 
     private Long insertUser(String email, Long roleId) {

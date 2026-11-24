@@ -131,6 +131,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return reply(request, 409, "TRIP_CONFLICT", error.getMessage(), Map.of(), new HttpHeaders());
     }
 
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<Object> idempotencyConflict(IdempotencyConflictException error, WebRequest request) {
+        return reply(request, 409, "IDEMPOTENCY_CONFLICT", error.getMessage(), Map.of(), new HttpHeaders());
+    }
+
+    @ExceptionHandler({BookingBusyException.class, org.springframework.dao.PessimisticLockingFailureException.class,
+            org.springframework.dao.QueryTimeoutException.class,
+            org.springframework.jdbc.CannotGetJdbcConnectionException.class,
+            org.springframework.transaction.CannotCreateTransactionException.class})
+    public ResponseEntity<Object> temporarilyUnavailable(WebRequest request) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "1");
+        return reply(request, 503, "SERVICE_UNAVAILABLE", "Please retry shortly", Map.of(), headers);
+    }
+
     @ExceptionHandler(InsufficientSeatsException.class)
     public ResponseEntity<Object> insufficientSeats(InsufficientSeatsException error, WebRequest request) {
         return reply(request, 409, "INSUFFICIENT_SEATS", error.getMessage(), Map.of(), new HttpHeaders());

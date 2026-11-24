@@ -3,7 +3,7 @@ package com.example.busbooking.security.ratelimit;
 import java.time.*;
 import java.util.*;
 
-public final class AuthRequestRateLimiter {
+public final class AuthRequestRateLimiter implements AuthRateLimiter {
     private final AuthRateLimitProperties properties;
     private final Clock clock;
     private final Map<Key, Window> windows = new HashMap<>();
@@ -15,6 +15,7 @@ public final class AuthRequestRateLimiter {
         this.clock = clock;
     }
 
+    @Override
     public synchronized Decision consume(String remoteAddress, String path) {
         int quota = properties.quota(path);
         if (quota == 0) { return new Decision(true, 0); }
@@ -45,7 +46,6 @@ public final class AuthRequestRateLimiter {
         return Math.max(1, (Duration.between(now, end).toMillis() + 999) / 1000);
     }
 
-    public record Decision(boolean allowed, long retryAfterSeconds) { }
     private record Key(String address, String path) { }
     private static final class Window {
         private final Instant endsAt;

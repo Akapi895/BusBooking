@@ -1,10 +1,13 @@
 package com.example.busbooking.security.ratelimit;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import java.util.Set;
 
 @ConfigurationProperties(prefix = "auth.rate-limit")
 public class AuthRateLimitProperties {
+    public enum Backend { LOCAL, REDIS }
+
+    private Backend backend = Backend.LOCAL;
+    private String redisPrefix = "busbooking:auth-rate:v1";
     private long windowSeconds = 60;
     private int maxKeys = 10_000;
     private int registerLimit = 5;
@@ -12,6 +15,10 @@ public class AuthRateLimitProperties {
     private int verifyLimit = 20;
     private int resendLimit = 5;
 
+    public Backend getBackend() { return backend; }
+    public void setBackend(Backend value) { backend = value; }
+    public String getRedisPrefix() { return redisPrefix; }
+    public void setRedisPrefix(String value) { redisPrefix = value; }
     public long getWindowSeconds() { return windowSeconds; }
     public void setWindowSeconds(long value) { windowSeconds = value; }
     public int getMaxKeys() { return maxKeys; }
@@ -36,7 +43,8 @@ public class AuthRateLimitProperties {
     }
 
     public void validate() {
-        if (windowSeconds < 1 || windowSeconds > 86400 || maxKeys < 1 || maxKeys > 100_000
+        if (backend == null || redisPrefix == null || !redisPrefix.matches("[a-zA-Z0-9:_-]{1,100}")
+                || windowSeconds < 1 || windowSeconds > 86400 || maxKeys < 1 || maxKeys > 100_000
                 || registerLimit < 1 || loginLimit < 1 || verifyLimit < 1 || resendLimit < 1
                 || registerLimit > 1_000_000 || loginLimit > 1_000_000
                 || verifyLimit > 1_000_000 || resendLimit > 1_000_000) {

@@ -1,14 +1,18 @@
 package com.example.busbooking.config;
 
 import com.example.busbooking.business.port.notification.EmailVerificationSender;
+import com.example.busbooking.business.port.notification.VerificationQueue;
 import com.example.busbooking.business.port.repository.EmailVerificationRepository;
 import com.example.busbooking.business.port.security.VerificationCodeProvider;
 import com.example.busbooking.business.service.EmailVerificationService;
 import com.example.busbooking.notification.SmtpEmailVerificationSender;
 import com.example.busbooking.security.HmacVerificationCodeProvider;
+import com.example.busbooking.security.VerificationPayloadCipher;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.mail.javamail.JavaMailSender;
 import java.time.Clock;
 
@@ -26,8 +30,15 @@ public class EmailVerificationConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(name = "auth.email-outbox.enabled", havingValue = "true", matchIfMissing = true)
+    public VerificationPayloadCipher verificationPayloadCipher(@Value("${auth.email-outbox.secret}") String secret) {
+        return new VerificationPayloadCipher(secret);
+    }
+
+    @Bean
     public EmailVerificationService emailVerificationService(EmailVerificationRepository repository,
-            VerificationCodeProvider codes, EmailVerificationSender sender, Clock clock) {
-        return new EmailVerificationService(repository, codes, sender, clock);
+            VerificationCodeProvider codes, EmailVerificationSender sender, Clock clock,
+            ObjectProvider<VerificationQueue> queue) {
+        return new EmailVerificationService(repository, codes, sender, clock, queue.getIfAvailable());
     }
 }

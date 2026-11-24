@@ -15,27 +15,21 @@ class CurrentUserLoaderTest {
 
     @Test
     void loadsOnlySafeIdentityAndReadsUpdatedRoleEachTime() {
-        when(users.findById(42L)).thenReturn(Optional.of(user(UserStatus.ACTIVE, true, RoleName.USER)))
-                .thenReturn(Optional.of(user(UserStatus.ACTIVE, true, RoleName.ADMIN)));
+        when(users.findActiveVerifiedPrincipal(42L)).thenReturn(Optional.of(principal(RoleName.USER)))
+                .thenReturn(Optional.of(principal(RoleName.ADMIN)));
         var first = loader.loadById(42L);
         assertThat(first.getName()).isEqualTo("42");
         assertThat(first.email()).isEqualTo("hoang@example.com");
         assertThat(first.role()).isEqualTo(RoleName.USER);
         assertThat(first.toString()).doesNotContain("hash-fixture");
         assertThat(loader.loadById(42L).role()).isEqualTo(RoleName.ADMIN);
-        verify(users, times(2)).findById(42L);
+        verify(users, times(2)).findActiveVerifiedPrincipal(42L);
     }
 
     @Test
     void deniesDeletedInactiveUnverifiedOrMissingRoleAccounts() {
-        when(users.findById(42L)).thenReturn(Optional.empty());
+        when(users.findActiveVerifiedPrincipal(42L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> loader.loadById(42L)).isInstanceOf(JwtAuthenticationException.class);
-        for (User invalid : new User[] {user(UserStatus.INACTIVE, true, RoleName.USER),
-                user(UserStatus.ACTIVE, false, RoleName.USER), user(UserStatus.ACTIVE, true, null)}) {
-            when(users.findById(42L)).thenReturn(Optional.of(invalid));
-            assertThatThrownBy(() -> loader.loadById(42L)).isInstanceOf(JwtAuthenticationException.class)
-                    .hasMessage("Authentication is required");
-        }
     }
 
     @Test
@@ -48,13 +42,12 @@ class CurrentUserLoaderTest {
 
     @Test
     void databaseOutageIsNotDisguisedAsInvalidAuthentication() {
-        when(users.findById(42L)).thenThrow(new IllegalStateException("database unavailable"));
+        when(users.findActiveVerifiedPrincipal(42L)).thenThrow(new IllegalStateException("database unavailable"));
         assertThatThrownBy(() -> loader.loadById(42L)).isInstanceOf(IllegalStateException.class)
                 .hasMessage("database unavailable");
     }
 
-    private User user(UserStatus status, boolean verified, RoleName role) {
-        return new User(42L, "Hoang", "hoang@example.com", "hash-fixture", "0901234567",
-                role == null ? null : new Role(1L, role), status, verified, null, null);
+    private UserRepository.Principal principal(RoleName role) {
+        return new UserRepository.Principal(42L, "hoang@example.com", role);
     }
 }

@@ -198,8 +198,10 @@ class RouteManagementIntegrationTest {
     private void insertTrip(Long route, Long vehicle, String status) {
         jdbc.update("""
                 INSERT INTO trips(route_id,vehicle_id,departure_time,arrival_time,price,available_seats,status)
-                VALUES (?, ?, now(), now() + interval '2 hour', 100000, 40, ?)
-                """, route, vehicle, status);
+                VALUES (?, ?, now() + ? * interval '1 day',
+                        now() + ? * interval '1 day' + interval '2 hour', 100000, 40, ?)
+                """, route, vehicle, "COMPLETED".equals(status) ? -1 : 1,
+                "COMPLETED".equals(status) ? -1 : 1, status);
     }
 
     private String token(Long userId) { return "Bearer " + jwt.issue(userId).value(); }

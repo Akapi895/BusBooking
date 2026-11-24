@@ -38,14 +38,14 @@ docker compose version
    ```
 
    Chỉ dùng lệnh này khi `.env.example` có tồn tại; `.env` là cấu hình cá nhân và phải được `.gitignore` loại trừ.
-4. Đảm bảo secret JWT và OTP **khác nhau**, là chuỗi Base64 giải mã ra **ít nhất 32 byte**. Với cấu hình đã được dùng trước đây, các biến quan trọng gồm:
+4. Tạo ba secret độc lập. `JWT_SECRET` và `EMAIL_OTP_SECRET` phải là Base64 giải mã ra ít nhất 32 byte. `OTP_OUTBOX_SECRET` phải giải mã ra đúng 32 byte. Dùng cùng giá trị outbox trên mọi instance chung DB và giữ giá trị ổn định qua các lần khởi động khi vẫn còn email chờ gửi.
 
    | Nhóm | Biến tiêu biểu |
    |---|---|
    | Database | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
    | JWT | `JWT_SECRET`, `JWT_EXPIRATION_MS`, `JWT_ISSUER` |
-   | OTP | `EMAIL_OTP_SECRET` |
-   | SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_AUTH`, `SMTP_STARTTLS`; profile `dev` cố định host `localhost`, dùng `SPRING_MAIL_HOST` để override host |
+   | OTP | `EMAIL_OTP_SECRET`, `OTP_OUTBOX_SECRET` |
+   | SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_AUTH`, `SMTP_STARTTLS` |
    | Docs / môi trường | `SPRING_PROFILES_ACTIVE`, `API_DOCS_ENABLED` |
 
    **Chú ý:** `.env.example` hiện ghi DB ở `5433/busbooking`, khác Compose (`5435/busbooking_dev_fresh`); dùng đúng URL của môi trường thực tế. Spring Boot chạy **trực tiếp bằng Maven không tự đọc `.env`**; Compose chỉ chuyển các biến đã khai báo trong `environment` vào backend, không tự chuyển mọi biến trong `.env`.
@@ -61,7 +61,7 @@ docker compose config --services
 
 Nếu repository chưa có `compose.yaml` hoặc lệnh kiểm tra báo lỗi, **không tiếp tục với lệnh khởi chạy**; kiểm tra lại bản bàn giao và cấu hình cần thiết.
 
-**Bước 2.** Build và khởi động các service được định nghĩa trong Compose. **Hạn chế hiện tại:** backend bật `dev`, đặt `SMTP_HOST=mailpit`, nhưng `application-dev.properties` cố định `spring.mail.host=localhost`. Cần override `SPRING_MAIL_HOST=mailpit` trong môi trường backend để dùng Mailpit qua network; chỉ thêm biến này vào `.env` chưa đủ vì Compose chưa chuyển nó vào container. Cấu hình hiện tại chưa sửa và luồng OTP qua Compose chưa được xác minh hoạt động:
+**Bước 2.** Build và khởi động các service. Compose cấu hình Mailpit làm SMTP cho backend. Khi nâng cấp DB cũ, chạy truy vấn kiểm tra lịch xe trùng trước khi Flyway áp dụng V18. Xem [Thiết kế database](02-database-design.md#26-migration-phase-2).
 
 ```powershell
 docker compose up -d --build
@@ -77,13 +77,23 @@ docker compose logs -f
 
 Thoát chế độ xem log bằng `Ctrl+C` (không dừng container).
 
-**Bước 4.** Mở Swagger tại `http://localhost:8086/swagger-ui/index.html`, Mailpit UI tại `http://localhost:8026`; đối chiếu **cổng host trong `docker compose ps`** nếu môi trường đã đổi cổng. Việc backend trả HTTP không xác nhận luồng OTP hoạt động khi còn hạn chế SMTP nêu trên.
+**Bước 4.** Mở Swagger tại `http://localhost:8086/swagger-ui/index.html` và Mailpit UI tại `http://localhost:8026`. Gửi yêu cầu đăng ký, đợi email xuất hiện trong Mailpit rồi dùng OTP để xác minh.
 
 **Dừng hệ thống** (không xóa database volume):
 
 ```powershell
 docker compose down
 ```
+
+**Dùng chung quota xác thực qua Redis.** Khởi chạy Compose với tệp bổ sung:
+
+```powershell
+docker compose -f compose.yaml -f compose.auth-rate-limit.yaml up -d --build
+```
+
+Redis chạy trên mạng riêng của Compose. Backend mặc định dùng bộ đếm local, còn tệp bổ sung bật `AUTH_RATE_LIMIT_BACKEND=redis`. Khi triển khai nhiều backend, dùng chung Redis, `AUTH_RATE_REDIS_PREFIX` và các giá trị quota. Có thể cấu hình kết nối Redis ngoài Compose bằng các biến `SPRING_DATA_REDIS_*`.
+
+Nginx ghi `X-Forwarded-For` từ kết nối trực tiếp. Cấu hình Compose tin địa chỉ proxy `172.31.241.2`. Khi triển khai ở mạng khác, dùng địa chỉ chính xác của proxy tin cậy và cấu hình proxy ghi đè header do client gửi.
 
 > **Không dùng `docker compose down -v`** khi muốn giữ dữ liệu. Compose hiện có backend service; khi dùng cách 2 để chạy Java local, dừng backend Compose nếu đang chạy (`docker compose stop backend`), chỉ khởi động `postgres` và dùng SMTP truy cập được từ host theo mục 6.5.
 
@@ -116,20 +126,23 @@ $env:DB_URL = "jdbc:postgresql://localhost:5435/busbooking_dev_fresh"
 $env:DB_USERNAME = "busbooking_user"
 $env:DB_PASSWORD = Read-Host "Mật khẩu PostgreSQL dev"
 
-# Tạo hai secret độc lập dùng trong phiên demo.
-# Giữ giá trị ổn định nếu muốn JWT/OTP còn hiệu lực sau restart.
+# Tạo ba secret độc lập dùng trong phiên demo.
+# Giữ giá trị ổn định qua các lần khởi động.
 $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
 $jwtBytes = New-Object byte[] 32
 $otpBytes = New-Object byte[] 32
+$outboxBytes = New-Object byte[] 32
 $rng.GetBytes($jwtBytes)
 $rng.GetBytes($otpBytes)
+$rng.GetBytes($outboxBytes)
 $env:JWT_SECRET = [Convert]::ToBase64String($jwtBytes)
 $env:EMAIL_OTP_SECRET = [Convert]::ToBase64String($otpBytes)
+$env:OTP_OUTBOX_SECRET = [Convert]::ToBase64String($outboxBytes)
 $rng.Dispose()
 $env:JWT_ISSUER = "busbooking"
 $env:JWT_EXPIRATION_MS = "86400000"
 
-$env:SPRING_MAIL_HOST = "127.0.0.1" # Override host cố định của profile dev
+$env:SMTP_HOST = "127.0.0.1"
 $env:SMTP_PORT = "1025"
 $env:SMTP_AUTH = "false"
 $env:SMTP_STARTTLS = "false"
@@ -142,7 +155,7 @@ $env:BOOTSTRAP_SUPER_ADMIN_ENABLED = "false"
 
 ```powershell
 .\mvnw.cmd -DskipTests clean package
-.\mvnw.cmd spring-boot:run
+.\mvnw.cmd spring-boot:run '-Dspring-boot.run.jvmArguments=-Duser.timezone=Asia/Ho_Chi_Minh'
 ```
 
 Ứng dụng sử dụng cấu hình `dev` trong phiên PowerShell trên. Khi chạy bằng IDE, cần khai báo **cùng các biến môi trường** trong Run Configuration. Nếu PostgreSQL/SMTP chạy **trong container** và backend cũng chạy **trong container**, không dùng `localhost` để kết nối container khác; thay bằng hostname/service tương ứng của Docker network.
@@ -197,12 +210,20 @@ Baseline hiệu năng GET Trip / POST Booking Pha 1 trên Kaggle CPU, script Loc
 | Hiện tượng | Kiểm tra / xử lý |
 |---|---|
 | `Connection refused` PostgreSQL | `docker compose ps` hoặc `docker ps`; kiểm tra đúng **cổng host**, database, user, password và network |
-| Flyway checksum mismatch / missing table | Đối chiếu migration **V1–V16** với lịch sử DB; **không tự ý sửa migration cũ, tắt validation hoặc chạy `flyway repair`** để che lỗi |
-| Backend không lên vì JWT/OTP secret | Kiểm tra hai secret Base64 khác nhau, tối thiểu 32 byte sau giải mã |
-| Không nhận OTP | Kiểm tra SMTP và Mailpit; profile `dev` cố định host `localhost`, cần `SPRING_MAIL_HOST` để override. Compose chưa chuyển biến này; backend local cần SMTP publish ra host |
+| Flyway checksum mismatch / missing table | Đối chiếu migration V1–V22 với lịch sử DB. |
+| PostgreSQL từ chối múi giờ `Asia/Saigon` | Đặt JVM option `-Duser.timezone=Asia/Ho_Chi_Minh` khi chạy từ IDE hoặc JAR trực tiếp. |
+| Backend không lên vì JWT/OTP secret | Kiểm tra ba secret Base64 độc lập. JWT và HMAC OTP cần ít nhất 32 byte, còn khóa outbox cần đúng 32 byte sau giải mã. |
+| Không nhận OTP | Kiểm tra SMTP, Mailpit và log worker. Khi chạy backend trên host, dùng cổng SMTP publish ra host. Worker thử lại với giãn cách tăng dần, tối đa 8 lần trong thời hạn OTP. |
 | Swagger trả 404 | Kiểm tra profile `dev`, `API_DOCS_ENABLED` và cổng publish backend |
 | HTTP `401` / `403` | Kiểm tra JWT, trạng thái xác minh email, role và ownership; đây có thể là phản hồi phân quyền đúng |
 | HTTP `429` khi thử auth | Rate limit đăng ký/đăng nhập/OTP; chờ hết cửa sổ giới hạn thay vì gọi liên tục |
+| HTTP `503` ở endpoint auth khi bật Redis | Kiểm tra kết nối Redis. Auth trả `Retry-After` trong khi chưa xác định được quota. |
 | Port 8085/8086/5435/1025/8025/8026 bị chiếm | Dùng `docker ps`, `Get-NetTCPConnection -State Listen`; điều chỉnh cổng phù hợp trong cấu hình |
 | Chạy Java trong container không kết nối được DB | JDBC URL không được dùng `localhost` để chỉ container PostgreSQL khác; dùng tên service/network thực tế |
 
+
+### Kiểm tra Flyway từ V16
+
+Chạy riêng bằng mvn -B -Dtest=FlywayUpgradeIntegrationTest test, hoặc chạy mvn -B verify như CI.
+Dùng PostgreSQL 16 dành riêng cho kiểm thử. Tài khoản TEST_DB_USERNAME cần quyền CREATEDB để suite tạo và dọn các DB kiểm thử riêng trong cùng cụm.
+Suite kiểm tra cài schema trên DB trống, nâng cấp dữ liệu V16 và xác nhận chạy lại migration không làm mất dữ liệu.
