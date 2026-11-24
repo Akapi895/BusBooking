@@ -75,7 +75,7 @@ src/main/java/com/example/busbooking/
 **Cần có:** JDK 21, PostgreSQL, SMTP (có thể dùng Mailpit) và source code chứa `pom.xml`, `mvnw.cmd`.
 
 1. Chuẩn bị database PostgreSQL và SMTP; xác nhận địa chỉ/cổng đang sử dụng.
-2. Cấu hình biến môi trường `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `EMAIL_OTP_SECRET` và `SMTP_*` theo [Running Guide](docs/06-running-guide.md). Hai secret phải độc lập; **Spring Boot chạy trực tiếp không tự đọc `.env`**.
+2. Cấu hình `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, ba secret độc lập `JWT_SECRET`, `EMAIL_OTP_SECRET`, `OTP_OUTBOX_SECRET` và các biến `SMTP_*`. Với Maven hoặc IDE, khai báo các biến trực tiếp trong phiên shell hoặc cấu hình chạy. [Running Guide](docs/06-running-guide.md)
 3. Từ thư mục gốc repository, chạy:
 
    ```powershell

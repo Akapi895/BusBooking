@@ -41,7 +41,7 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponses({
             @ApiResponse(responseCode = "409", description = "Email already registered", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "503", description = "SMTP unavailable; account remains pending", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+            @ApiResponse(responseCode = "503", description = "Verification request temporarily unavailable", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @Operation(summary = "Register a USER and request an email verification code")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -65,7 +65,7 @@ public class AuthController {
 
     @PostMapping("/resend-verification")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    @ApiResponse(responseCode = "503", description = "SMTP unavailable", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "503", description = "Verification request temporarily unavailable", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @Operation(summary = "Request another code if the account is eligible")
     public ResponseEntity<MessageResponse> resend(@Valid @RequestBody ResendVerificationRequest request) {
         verification.resend(request.email());

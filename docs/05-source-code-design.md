@@ -55,7 +55,7 @@ src/
 │       ├── application.properties
 │       ├── application-dev.properties
 │       ├── application-test.properties
-│       └── db/migration/       # Flyway V1–V16
+│       └── db/migration/       # Flyway V1–V21
 └── test/java/com/example/busbooking/
     ├── api/
     ├── business/
@@ -162,7 +162,7 @@ flowchart TD
 
 **Tên đáng lưu ý:** Port nghiệp vụ là `OperatorRepository`, trong khi adapter lưu trữ thực tế mang tên `BusOperatorRepositoryAdapter` và JPA interface là `SpringDataBusOperatorRepository`. Đây là khác biệt cách đặt tên, không phải ba module nghiệp vụ độc lập.
 
-Cấu trúc trên cho phép các use case làm việc với abstraction mà không tham chiếu trực tiếp `JpaRepository`. Nhánh OTP/role dùng JDBC, không đi qua Spring Data repository; `email_verifications` không có JPA Entity riêng. Transaction OTP/role nằm ở adapter, còn giao dịch thay đổi Booking/Trip nằm ở service; SMTP chạy sau khi tài khoản/challenge đã commit.
+Cấu trúc trên cho phép use case làm việc qua port. OTP và quản lý role dùng adapter JDBC. Adapter outbox ghi yêu cầu gửi cùng transaction với tài khoản mới. Worker gọi SMTP sau khi commit. Các giao dịch booking và chuyến nằm ở service.
 
 ## 5.7. Security và Notification
 
@@ -218,7 +218,7 @@ Source có `RoleManagementController`/`RoleManagementService` và `BootstrapSupe
 
 - `config/`: `AuthConfig`, `EmailVerificationConfig`, `UserConfig`, `OpenApiConfig`, `TimeConfig`, `BootstrapSuperAdminProperties`.
 - `exception/`: `GlobalExceptionHandler`, `ErrorResponse`, `ApiErrorController`, `ApiErrorWriter`.
-- `resources/`: `application.properties`, `application-dev.properties`, `application-test.properties` và migration Flyway **V1–V16**.
+- `resources/` chứa cấu hình Spring Boot và migration Flyway V1–V21.
 
 **Hai nhóm exception khác nhau:** `domain/exception` mô tả lỗi nghiệp vụ; `exception/` chuyển lỗi phù hợp thành phản hồi HTTP/JSON. Lỗi bị Spring Security từ chối trước controller được xử lý qua các handler/filter liên quan.
 

@@ -94,8 +94,8 @@ Content-Type: application/json
 **Các quy tắc đã mô tả trong thiết kế triển khai:**
 
 - Đăng ký tạo tài khoản `USER`/`ACTIVE`, `emailVerified=false`; sau xác minh mới có thể đăng nhập. Tài khoản đăng ký không được tự chọn role, trạng thái hoặc `emailVerified`. Email được trim/lowercase, tối đa 100 ký tự (phần trước `@` tối đa 64); họ tên sau trim phải có 1–100 ký tự, không chứa ký tự điều khiển; điện thoại Việt Nam được chuẩn hóa `+84` thành `0`.
-- OTP dài 6 chữ số, dùng một lần, hiệu lực 10 phút, tối đa 5 lần nhập sai mỗi mã; gửi lại cách ít nhất 60 giây. OTP thô không được trả qua API và không lưu ở database; hệ thống lưu HMAC digest.
-- `resend-verification` dùng phản hồi chung để hạn chế dò tìm tài khoản. OTP mới vô hiệu hóa mã trước đó.
+- OTP dài 6 chữ số, dùng một lần, hiệu lực 10 phút kể từ lúc tiếp nhận yêu cầu, tối đa 5 lần nhập sai mỗi mã. Hệ thống lưu HMAC digest để xác minh và mã hóa nội dung chờ gửi trong outbox.
+- Đăng ký và yêu cầu gửi lại ghi vào outbox. Worker gửi và thử lại khi SMTP tạm lỗi. Mã đang còn hiệu lực có thể tiếp tục dùng cho đến khi SMTP chấp nhận mã mới. Gửi lại cách ít nhất 60 giây và trả phản hồi chung để hạn chế dò tìm tài khoản.
 - Mật khẩu lưu dưới dạng hash BCrypt; không trả hash trong JSON. Đăng ký yêu cầu mật khẩu không trắng, tối thiểu 8 ký tự và tối đa 72 byte UTF-8; login yêu cầu mật khẩu không rỗng, tối đa 72 byte UTF-8. JWT chỉ được cấp khi đăng nhập thành công.
 - JWT được xác minh ở security filter; quyền và tình trạng tài khoản được kiểm tra theo dữ liệu hiện hành. Mặc định TTL được mô tả là 24 giờ; giá trị triển khai lấy theo cấu hình.
 - Các endpoint auth còn áp dụng giới hạn tần suất theo IP/endpoint trong cấu hình hiện tại (mặc định trong tài liệu cũ: register 5, login 10, verify 20, resend 5 yêu cầu/60 giây). Đây là bộ đếm trong bộ nhớ; **không phải rate limiter dùng chung nhiều instance**.
@@ -106,6 +106,8 @@ Content-Type: application/json
 | `GET /api/users/me` | Xem profile | `200 UserResponse` của JWT hiện tại; không nhận userId từ client |
 | `PUT /api/users/me` | Sửa profile | Bắt buộc `fullName`, `phone` theo validation xác thực; trả `200 UserResponse`; không cho tự sửa email, role, password hoặc trạng thái |
 | `GET /api/users/me/bookings` | Lịch sử Booking cá nhân | Chỉ USER được đọc danh sách Booking của mình; ADMIN/SUPER_ADMIN bị từ chối |
+
+Lịch sử cá nhân và danh sách booking quản trị nhận `page` (mặc định 0), `size` (mặc định 20, tối đa 100) và trả mảng JSON, sắp xếp theo thời điểm đặt mới nhất rồi theo ID giảm dần.
 
 ```json
 {
@@ -119,7 +121,7 @@ Content-Type: application/json
 | API | Bộ lọc / tham số | Ý nghĩa |
 |---|---|---|
 | `GET /api/locations` | `q` (tùy chọn) | Danh sách Location để lấy ID và tìm chuyến |
-| `GET /api/trips` | `originId`, `destinationId`, `departureDate` | Tìm kiếm các chuyến xe; ngày có dạng `YYYY-MM-DD` |
+| `GET /api/trips` | `originId`, `destinationId`, `departureDate`, `page`, `size` | Trả mảng chuyến `SCHEDULED` vẫn còn ghế và chưa khởi hành, sắp xếp theo giờ đi rồi ID |
 | `GET /api/trips/{tripId}` | `tripId` | Chi tiết một chuyến xe |
 
 Ví dụ:
@@ -128,15 +130,15 @@ Ví dụ:
 GET /api/trips?originId=1&destinationId=2&departureDate=2026-11-10
 ```
 
-Dữ liệu trả về có thể chứa điểm đi/đến, thời điểm khởi hành, giá, ghế còn lại, phương tiện, nhà xe và trạng thái; **tên trường và cấu trúc lồng nhau theo `TripResponse` thực tế trong OpenAPI**. Tài liệu cũ có các ví dụ `TripResponse` không đồng nhất giữa list/detail, nên không coi các ví dụ đó là schema chính thức.
+Ngày có dạng `YYYY-MM-DD` theo giờ Việt Nam. Phân trang mặc định `page=0&size=20`, với `size` từ 1 đến 100. Tên trường và cấu trúc phản hồi theo `TripResponse` trong OpenAPI.
 
 ### 4.3.4. Booking
 
 | API | Ý nghĩa | Quy tắc chính |
 |---|---|---|
-| `POST /api/bookings` | Tạo đặt vé | Chỉ USER; Trip tồn tại, `SCHEDULED`, quantity > 0 và đủ ghế; lưu giá tại thời điểm đặt, giảm ghế; chưa kiểm tra giờ khởi hành |
+| `POST /api/bookings` | Tạo đặt vé | Chỉ USER. Trip phải là `SCHEDULED`, chưa khởi hành và còn đủ ghế. Booking lưu giá hiện hành và giảm ghế trong cùng transaction. |
 | `GET /api/bookings/{bookingId}` | Xem chi tiết | USER chỉ xem Booking của mình; ADMIN/SUPER_ADMIN có thể xem Booking khác |
-| `DELETE /api/bookings/{bookingId}` | Hủy đặt vé | **Hủy nghiệp vụ**, không xóa vật lý; kiểm tra quyền, chưa `CANCELLED`, hoàn ghế không vượt capacity; chưa có cutoff theo thời gian/trạng thái Trip |
+| `DELETE /api/bookings/{bookingId}` | Hủy đặt vé | Chủ booking có thể hủy khi còn hơn 30 phút đến giờ đi. ADMIN/SUPER_ADMIN có thể hủy sau mốc này. Mọi yêu cầu vẫn kiểm tra trạng thái booking và sức chứa trước khi hoàn ghế. |
 
 Ví dụ tạo Booking:
 
@@ -144,6 +146,7 @@ Ví dụ tạo Booking:
 POST /api/bookings
 Content-Type: application/json
 Authorization: Bearer <token>
+Idempotency-Key: 90cc8547268d49aa8e40df82d39157a3
 ```
 
 ```json
@@ -155,7 +158,9 @@ Authorization: Bearer <token>
 }
 ```
 
-Tạo thành công: `201 Created`, response chứa thông tin Booking (mã Booking, chuyến xe, số lượng, giá, trạng thái, thời điểm đặt). Booking đã hủy có trạng thái `CANCELLED`; các Booking hợp lệ mới được tạo có trạng thái `CONFIRMED` theo hợp đồng hiện tại.
+Tạo thành công trả `201 Created` với booking `CONFIRMED`. Tên hành khách sau chuẩn hóa dài 1–100 ký tự, điện thoại theo định dạng Việt Nam và số vé là số nguyên dương.
+
+`Idempotency-Key` là header tùy chọn, dài 1–128 ký tự ASCII hiển thị và có hiệu lực 24 giờ theo từng tài khoản. Khi thử lại cùng nội dung đã chuẩn hóa, API trả `201` với dữ liệu đặt vé ban đầu, kể cả khi vé đã được hủy sau đó. Dùng lại cùng key với nội dung khác trả `409 IDEMPOTENCY_CONFLICT`. Khi nhận `503 SERVICE_UNAVAILABLE` do quá tải hoặc DB tạm thời không sẵn sàng, đợi theo `Retry-After` rồi thử lại với cùng key.
 
 **Tính nhất quán:** `BookingService` dùng `@Transactional`; tạo Booking khóa Trip bằng `PESSIMISTIC_WRITE`, giảm ghế bằng update có điều kiện không âm rồi lưu Booking. Hủy khóa Booking rồi Trip, kiểm tra capacity, hoàn ghế rồi đổi trạng thái. Hết ghế trả `409 INSUFFICIENT_SEATS`; Trip không `SCHEDULED`, hủy lặp hoặc không thể hoàn ghế trả `400 BUSINESS_ERROR`. Không coi mọi `409` là sự cố hạ tầng.
 
@@ -179,7 +184,7 @@ Chỉ chấp nhận `USER` hoặc `ADMIN`. Nâng từ USER lên ADMIN yêu cầu
 | `POST /api/admin/trips` | `routeId`, `vehicleId`, `departureTime`, `arrivalTime`, `price` | Tạo `SCHEDULED`, số ghế ban đầu theo capacity xe |
 | `PUT /api/admin/trips/{tripId}` | Các trường Trip tương ứng | Chỉ cập nhật chuyến `SCHEDULED`; áp dụng kiểm tra đổi xe/sức chứa |
 | `DELETE /api/admin/trips/{tripId}` | `tripId` | Hủy mềm Trip; không xóa DB record |
-| `GET /api/admin/bookings` | `userId`, `tripId`, `status` (tùy chọn) | Xem danh sách Booking toàn hệ thống |
+| `GET /api/admin/bookings` | `userId`, `tripId`, `status`, `page`, `size` (tùy chọn) | Xem danh sách booking toàn hệ thống theo trang |
 
 Ví dụ tạo/cập nhật Trip:
 
@@ -193,9 +198,10 @@ Ví dụ tạo/cập nhật Trip:
 }
 ```
 
-- Route và Vehicle phải tồn tại và có trạng thái phù hợp. Thời điểm đến sau thời điểm đi; giá không âm và vừa giới hạn `NUMERIC(12,2)`.
-- Cập nhật Trip đã có Booking phải bảo toàn Booking hiện có, giá lịch sử và số ghế hợp lệ. Nếu thay phương tiện, số ghế khả dụng cần tính theo sức chứa mới trừ số ghế của Booking `CONFIRMED`.
-- Chính sách hủy Trip hiện tại: chỉ hủy chuyến `SCHEDULED` không còn Booking `CONFIRMED`; các trạng thái/xung đột khác trả `409 TRIP_CONFLICT`. Hủy lặp chuyến đã `CANCELLED` có thể trả `200` với trạng thái hiện tại.
+- Route và Vehicle phải tồn tại và đang hoạt động. Giờ đi phải nằm trong tương lai, giờ đến sau giờ đi. Hai chuyến trên cùng một xe có thể nối tiếp nhưng không được chồng giờ. Chuyến đã hủy được loại khỏi kiểm tra lịch.
+- Chuyến có booking `CONFIRMED` giữ tuyến và giờ đi/đến. Có thể đổi xe nếu đủ sức chứa hoặc đổi giá cho lượt đặt sau. Các booking đã xác nhận giữ nguyên đơn giá.
+- Chỉ hủy chuyến còn `SCHEDULED`, chưa tới giờ đi và không còn booking `CONFIRMED`. Xung đột trả `409 TRIP_CONFLICT`. Hủy lặp chuyến đã `CANCELLED` trả lại trạng thái hiện tại.
+- Job chuyển chuyến từ `SCHEDULED` sang `IN_PROGRESS` khi đến giờ đi và sang `COMPLETED` khi đến giờ đến. Nếu job chạy trễ, chuyến đã qua giờ đến được chuyển thẳng sang `COMPLETED`.
 - **Không có** API Admin xem Booking riêng theo ID hoặc sửa tùy ý trạng thái Booking: dùng `GET /api/bookings/{bookingId}` và `DELETE /api/bookings/{bookingId}` có sẵn, để không bypass nghiệp vụ hoàn ghế.
 - Chưa có workflow hoàn tiền, hủy hàng loạt Booking hoặc thông báo hủy chuyến. Đây là giới hạn nghiệp vụ của Pha 1.
 

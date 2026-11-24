@@ -38,9 +38,9 @@ flowchart TB
 | Domain | `domain/model`, `domain/enums`, `domain/exception` | Mô hình nghiệp vụ, trạng thái và ngoại lệ nghiệp vụ |
 | Persistence | `data/adapter`, `data/repository`, `data/entity`, `data/mapper` | Hiện thực repository port bằng JPA/mapping domain ↔ entity; OTP và quản lý role còn dùng `JdbcTemplate` |
 | Security | `security`, `security/ratelimit` | Xác thực JWT, mã hóa mật khẩu, HMAC OTP, giới hạn tần suất và xử lý lỗi truy cập |
-| Notification | `notification` | Adapter gửi email xác minh qua SMTP |
+| Notification | `notification` | Worker đọc outbox và adapter gửi email xác minh qua SMTP |
 | Cross-cutting | `config`, `exception` | Cấu hình ứng dụng, OpenAPI, biểu diễn lỗi HTTP và xử lý exception tập trung |
-| Persistence schema | `src/main/resources/db/migration` | Các migration Flyway cho PostgreSQL (V1–V16 trong cây source được cung cấp) |
+| Persistence schema | `src/main/resources/db/migration` | Các migration Flyway V1–V21 cho PostgreSQL |
 
 ### API layer
 
@@ -186,28 +186,43 @@ sequenceDiagram
     participant ADP as Data Adapters / JPA
     participant DB as PostgreSQL
 
-    Client->>SEC: POST /api/bookings + Bearer token
-    SEC->>API: Request sau khi qua kiểm tra bảo mật
-    API->>BIZ: Dữ liệu yêu cầu đã được chuyển đổi
-    BIZ->>PORT: Tra cứu user / trip / booking theo use case
-    PORT->>ADP: Gọi implementation
-    ADP->>DB: Truy vấn và cập nhật dữ liệu
-    DB-->>ADP: Kết quả
-    ADP-->>PORT: Domain object / kết quả
-    PORT-->>BIZ: Dữ liệu nghiệp vụ
-    BIZ-->>API: Kết quả đặt vé hoặc lỗi nghiệp vụ
-    API-->>Client: JSON + HTTP status
+    Client->>SEC: POST /api/bookings, Bearer token, Idempotency-Key tùy chọn
+    SEC->>API: Tài khoản còn hoạt động và có quyền
+    API->>API: Giới hạn số yêu cầu đang xử lý cho chuyến
+    API->>BIZ: Bắt đầu transaction đặt vé
+    BIZ->>PORT: Kiểm tra và giữ key nếu có
+    PORT->>ADP: Giữ hoặc đọc key hiện hành
+    ADP->>DB: Ghi theo unique key của tài khoản
+    alt Key đã có booking và payload trùng
+        BIZ-->>API: Dữ liệu đặt vé ban đầu
+    else Yêu cầu mới
+        BIZ->>PORT: Khóa chuyến, kiểm tra giờ đi và giữ ghế
+        PORT->>ADP: Cập nhật ghế, lưu booking và liên kết key
+        ADP->>DB: Commit cùng transaction
+        BIZ-->>API: Booking CONFIRMED
+    end
+    API-->>Client: 201 Created
 ```
 
-`BookingService.create/cancel` và `TripService.create/update/cancel` có `@Transactional`. Tạo Booking khóa Trip bằng `PESSIMISTIC_WRITE`, giảm ghế bằng update có điều kiện không âm rồi lưu Booking; lỗi lưu được rollback cùng giao dịch. Hủy Booking khóa Booking rồi Trip, kiểm tra capacity, hoàn ghế rồi đổi trạng thái. Transaction OTP và đổi role nằm tại adapter JDBC; SMTP được gọi sau khi tài khoản/challenge đã commit. Có integration test cho ghế cuối và rollback; trạng thái pass hiện tại chưa xác minh.
+Các thay đổi ghế, booking và liên kết idempotency nằm trong một transaction. Tạo booking dùng truy vấn khóa chuyến chỉ lấy các trường cần thiết và cập nhật số ghế có điều kiện. Hủy booking khóa booking rồi khóa chuyến, sau đó kiểm tra sức chứa và hoàn ghế trong cùng transaction. Giới hạn đồng thời theo chuyến hoạt động trên từng instance, còn PostgreSQL vẫn quyết định số ghế có thể bán.
 
 ### Đăng ký và xác thực email
 
-1. `AuthController` nhận yêu cầu; `AuthService` và `EmailVerificationService` xử lý nghiệp vụ tài khoản/xác minh.
-2. Business sử dụng `UserRepository`, `EmailVerificationRepository` và các port mật khẩu/OTP.
-3. `BCryptPasswordHasher` và `HmacVerificationCodeProvider` là các thành phần hiện thực xử lý bảo mật tương ứng.
-4. `SmtpEmailVerificationSender` kết nối tới dịch vụ SMTP; **Mailpit** có thể đóng vai trò SMTP kiểm thử trong môi trường phát triển.
-5. Khi đăng nhập, JWT được cấp và các request tiếp theo được kiểm tra ở tầng Security.
+1. `AuthController` gọi `AuthService` và `EmailVerificationService`. Adapter của `VerificationQueue` lưu tài khoản và nội dung OTP đã mã hóa trong cùng transaction, rồi API trả `201`.
+2. `VerificationOutboxWorker` nhận quyền xử lý một mục tới hạn qua `SKIP LOCKED` và lease, rồi gọi SMTP ngoài transaction.
+3. Nếu gửi thành công, worker lưu HMAC digest của mã mới và xóa nội dung mã hóa khỏi outbox. Nếu gửi lỗi, worker đặt lịch gửi lại và giữ nguyên mã đã gửi trước đó. SMTP có thể nhận cùng email lần nữa khi tiến trình dừng sau khi gửi nhưng trước khi ghi nhận hoàn tất.
+4. Người dùng xác minh OTP rồi đăng nhập để nhận JWT. Filter dùng projection ID, trạng thái và role hiện hành để xác thực các request sau đó.
+
+### Vòng đời chuyến
+
+```mermaid
+stateDiagram-v2
+    [*] --> SCHEDULED
+    SCHEDULED --> IN_PROGRESS: Đến giờ đi
+    IN_PROGRESS --> COMPLETED: Đến giờ đến
+    SCHEDULED --> COMPLETED: Job chạy sau giờ đến
+    SCHEDULED --> CANCELLED: Admin hủy trước giờ đi và không còn vé xác nhận
+```
 
 Cây source có `BootstrapSuperAdminService` và `RoleManagementService`; chi tiết điều kiện tạo SUPER_ADMIN, nâng/hạ quyền và quy tắc xác minh email cần tham chiếu API/kiểm thử hiện hành, thay vì suy ra chỉ từ tên class.
 
@@ -258,7 +273,7 @@ Việc ánh xạ lỗi sang HTTP 400/401/403/404/409 phải căn cứ vào handl
 
 ### Database
 
-Ứng dụng sử dụng **PostgreSQL**; phần `data` sử dụng **Spring Data JPA** cùng **JdbcTemplate** cho OTP/quản lý role; `email_verifications` không có JPA Entity riêng. `Flyway` lưu lịch sử thay đổi schema trong `src/main/resources/db/migration/` với các file V1–V16 theo cây source được cung cấp.
+Ứng dụng dùng PostgreSQL qua Spring Data JPA và JdbcTemplate. Các adapter dùng JDBC cho idempotency, outbox, xác minh email và quản lý role. Flyway quản lý schema qua V1–V21.
 
 Tài liệu thiết kế bảng, khóa ngoại, constraint và index: [`02-database-design.md`](02-database-design.md).
 
