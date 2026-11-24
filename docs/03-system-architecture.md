@@ -40,7 +40,7 @@ flowchart TB
 | Security | `security`, `security/ratelimit` | Xác thực JWT, mã hóa mật khẩu, HMAC OTP, giới hạn tần suất và xử lý lỗi truy cập |
 | Notification | `notification` | Worker đọc outbox và adapter gửi email xác minh qua SMTP |
 | Cross-cutting | `config`, `exception` | Cấu hình ứng dụng, OpenAPI, biểu diễn lỗi HTTP và xử lý exception tập trung |
-| Persistence schema | `src/main/resources/db/migration` | Các migration Flyway V1–V21 cho PostgreSQL |
+| Persistence schema | `src/main/resources/db/migration` | Các migration Flyway V1–V22 cho PostgreSQL |
 
 ### API layer
 
@@ -196,15 +196,15 @@ sequenceDiagram
     alt Key đã có booking và payload trùng
         BIZ-->>API: Dữ liệu đặt vé ban đầu
     else Yêu cầu mới
-        BIZ->>PORT: Khóa chuyến, kiểm tra giờ đi và giữ ghế
-        PORT->>ADP: Cập nhật ghế, lưu booking và liên kết key
-        ADP->>DB: Commit cùng transaction
+        BIZ->>PORT: Giữ ghế cho chuyến đủ điều kiện
+        PORT->>ADP: UPDATE có điều kiện và trả giá cùng giờ đi
+        ADP->>DB: Cập nhật ghế, lưu booking và liên kết key trong cùng transaction
         BIZ-->>API: Booking CONFIRMED
     end
     API-->>Client: 201 Created
 ```
 
-Các thay đổi ghế, booking và liên kết idempotency nằm trong một transaction. Tạo booking dùng truy vấn khóa chuyến chỉ lấy các trường cần thiết và cập nhật số ghế có điều kiện. Hủy booking khóa booking rồi khóa chuyến, sau đó kiểm tra sức chứa và hoàn ghế trong cùng transaction. Giới hạn đồng thời theo chuyến hoạt động trên từng instance, còn PostgreSQL vẫn quyết định số ghế có thể bán.
+Các thay đổi ghế, booking và liên kết idempotency nằm trong một transaction. Tạo booking dùng `UPDATE … RETURNING` để giữ ghế và đọc giá. Service đối chiếu lại giờ đi sau khi câu lệnh lấy được khóa. Khi không giữ được ghế, service đọc hàng dưới khóa để phân biệt chuyến thiếu, chuyến hết ghế và chuyến không còn nhận đặt, hoặc thử giữ lại nếu ghế vừa được hoàn. Hủy booking khóa booking rồi khóa chuyến, sau đó kiểm tra sức chứa và hoàn ghế trong cùng transaction. Giới hạn đồng thời theo chuyến hoạt động trên từng instance, còn PostgreSQL vẫn quyết định số ghế có thể bán.
 
 ### Đăng ký và xác thực email
 
@@ -233,7 +233,7 @@ Cây source có `BootstrapSuperAdminService` và `RoleManagementService`; chi ti
 - `SecurityConfig` tổ chức các thành phần Spring Security và quy tắc truy cập HTTP.
 - `JwtAuthenticationFilter`, `JwtService` và `CurrentUserLoader` tham gia xử lý request có Bearer token.
 - `BCryptPasswordHasher`, `HmacVerificationCodeProvider` tương ứng với mật khẩu và mã OTP.
-- `security/ratelimit` gồm `AuthRateLimitFilter`, `AuthRequestRateLimiter` và cấu hình liên quan đến giới hạn request xác thực.
+- `AuthRateLimitFilter` dùng địa chỉ client do Tomcat xác định. Compose cấu hình chỉ tin IP của Nginx, và Nginx ghi lại địa chỉ client từ kết nối. Bộ giới hạn local dùng bộ nhớ. Chế độ Redis dùng cùng quota theo IP và endpoint trên các instance.
 - Role nghiệp vụ được biểu diễn bằng `RoleName`; code hiện có các thành phần quản lý role/SUPER_ADMIN. Quyền truy cập cụ thể phải lấy từ `SecurityConfig` và service tương ứng.
 
 ```mermaid
@@ -273,7 +273,7 @@ Việc ánh xạ lỗi sang HTTP 400/401/403/404/409 phải căn cứ vào handl
 
 ### Database
 
-Ứng dụng dùng PostgreSQL qua Spring Data JPA và JdbcTemplate. Các adapter dùng JDBC cho idempotency, outbox, xác minh email và quản lý role. Flyway quản lý schema qua V1–V21.
+Ứng dụng dùng PostgreSQL qua Spring Data JPA và JdbcTemplate. Các adapter dùng JDBC cho giữ ghế, idempotency, outbox, xác minh email và quản lý role. Flyway quản lý schema qua V1–V22.
 
 Tài liệu thiết kế bảng, khóa ngoại, constraint và index: [`02-database-design.md`](02-database-design.md).
 
@@ -284,6 +284,7 @@ flowchart LR
     C["HTTP Client"] --> APP["Spring Boot Backend"]
     APP -->|JDBC| PG[(PostgreSQL)]
     APP -->|SMTP| SMTP["SMTP server / Mailpit khi test"]
+    APP -.->|Quota xác thực khi bật Redis| CACHE[(Redis)]
 ```
 
 - **Chạy ứng dụng:** có thể thực thi Spring Boot trên máy hoặc trong container; chi tiết port, biến môi trường, health check và các service của Docker Compose phải lấy từ cấu hình triển khai thực tế.

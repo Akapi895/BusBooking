@@ -55,7 +55,7 @@ src/
 │       ├── application.properties
 │       ├── application-dev.properties
 │       ├── application-test.properties
-│       └── db/migration/       # Flyway V1–V21
+│       └── db/migration/       # Flyway V1–V22
 └── test/java/com/example/busbooking/
     ├── api/
     ├── business/
@@ -218,7 +218,7 @@ Source có `RoleManagementController`/`RoleManagementService` và `BootstrapSupe
 
 - `config/`: `AuthConfig`, `EmailVerificationConfig`, `UserConfig`, `OpenApiConfig`, `TimeConfig`, `BootstrapSuperAdminProperties`.
 - `exception/`: `GlobalExceptionHandler`, `ErrorResponse`, `ApiErrorController`, `ApiErrorWriter`.
-- `resources/` chứa cấu hình Spring Boot và migration Flyway V1–V21.
+- `resources/` chứa cấu hình Spring Boot và migration Flyway V1–V22.
 
 **Hai nhóm exception khác nhau:** `domain/exception` mô tả lỗi nghiệp vụ; `exception/` chuyển lỗi phù hợp thành phản hồi HTTP/JSON. Lỗi bị Spring Security từ chối trước controller được xử lý qua các handler/filter liên quan.
 
@@ -233,7 +233,7 @@ Ví dụ ở mức thành phần, không thay thế đặc tả API:
 3. `BookingController` tiếp nhận DTO, sau đó chuyển yêu cầu đến `BookingService`.
 4. `BookingService` kiểm tra điều kiện chuyến xe, số lượng vé và quyền nghiệp vụ cần thiết.
 5. Service gọi repository port, adapter sử dụng Spring Data JPA và persistence mapper để đọc/ghi dữ liệu.
-6. Trong `@Transactional`, service khóa Trip bằng `PESSIMISTIC_WRITE`, giảm ghế bằng update có điều kiện không âm rồi lưu Booking; lỗi lưu làm rollback cả phần giảm ghế.
+6. Trong `@Transactional`, service giữ ghế và đọc giá bằng một `UPDATE … RETURNING` có điều kiện, kiểm tra lại giờ đi và lưu booking. Lỗi lưu rollback cả phần giữ ghế.
 7. Kết quả được ánh xạ thành `BookingResponse` và trả về client.
 
 Đối với các yêu cầu đồng thời, code kết hợp transaction, khóa bi quan và cập nhật ghế có điều kiện. Hủy Booking khóa Booking rồi Trip, kiểm tra capacity, hoàn ghế rồi cập nhật trạng thái trong cùng giao dịch. `TripBookingIntegrationTest` có test cạnh tranh ghế cuối và rollback; kết quả pass hiện tại chưa xác minh.

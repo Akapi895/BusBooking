@@ -98,7 +98,7 @@ Content-Type: application/json
 - Đăng ký và yêu cầu gửi lại ghi vào outbox. Worker gửi và thử lại khi SMTP tạm lỗi. Mã đang còn hiệu lực có thể tiếp tục dùng cho đến khi SMTP chấp nhận mã mới. Gửi lại cách ít nhất 60 giây và trả phản hồi chung để hạn chế dò tìm tài khoản.
 - Mật khẩu lưu dưới dạng hash BCrypt; không trả hash trong JSON. Đăng ký yêu cầu mật khẩu không trắng, tối thiểu 8 ký tự và tối đa 72 byte UTF-8; login yêu cầu mật khẩu không rỗng, tối đa 72 byte UTF-8. JWT chỉ được cấp khi đăng nhập thành công.
 - JWT được xác minh ở security filter; quyền và tình trạng tài khoản được kiểm tra theo dữ liệu hiện hành. Mặc định TTL được mô tả là 24 giờ; giá trị triển khai lấy theo cấu hình.
-- Các endpoint auth còn áp dụng giới hạn tần suất theo IP/endpoint trong cấu hình hiện tại (mặc định trong tài liệu cũ: register 5, login 10, verify 20, resend 5 yêu cầu/60 giây). Đây là bộ đếm trong bộ nhớ; **không phải rate limiter dùng chung nhiều instance**.
+- Các endpoint auth áp dụng quota theo IP và endpoint, mặc định register 5, login 10, verify 20 và resend 5 yêu cầu trong 60 giây. Redis chia sẻ bộ đếm giữa các instance khi bật. Vượt quota trả `429 RATE_LIMITED`. Khi Redis không khả dụng, các yêu cầu được giới hạn trả `503 SERVICE_UNAVAILABLE`. Cả hai phản hồi có `Retry-After`.
 
 ### 4.3.2. User Profile, Booking History
 | API | Ý nghĩa | Quy tắc chính |
@@ -162,7 +162,7 @@ Tạo thành công trả `201 Created` với booking `CONFIRMED`. Tên hành kh�
 
 `Idempotency-Key` là header tùy chọn, dài 1–128 ký tự ASCII hiển thị và có hiệu lực 24 giờ theo từng tài khoản. Khi thử lại cùng nội dung đã chuẩn hóa, API trả `201` với dữ liệu đặt vé ban đầu, kể cả khi vé đã được hủy sau đó. Dùng lại cùng key với nội dung khác trả `409 IDEMPOTENCY_CONFLICT`. Khi nhận `503 SERVICE_UNAVAILABLE` do quá tải hoặc DB tạm thời không sẵn sàng, đợi theo `Retry-After` rồi thử lại với cùng key.
 
-**Tính nhất quán:** `BookingService` dùng `@Transactional`; tạo Booking khóa Trip bằng `PESSIMISTIC_WRITE`, giảm ghế bằng update có điều kiện không âm rồi lưu Booking. Hủy khóa Booking rồi Trip, kiểm tra capacity, hoàn ghế rồi đổi trạng thái. Hết ghế trả `409 INSUFFICIENT_SEATS`; Trip không `SCHEDULED`, hủy lặp hoặc không thể hoàn ghế trả `400 BUSINESS_ERROR`. Không coi mọi `409` là sự cố hạ tầng.
+Khi tạo booking, PostgreSQL giảm ghế và trả giá bằng một `UPDATE … RETURNING` có điều kiện. Giữ ghế và lưu booking cùng transaction. Khi hủy, hệ thống khóa booking rồi khóa chuyến để kiểm tra sức chứa và hoàn ghế. Hết ghế trả `409 INSUFFICIENT_SEATS`. Chuyến không nhận đặt, hủy lặp hoặc không thể hoàn ghế trả `400 BUSINESS_ERROR`.
 
 ### 4.3.5. Role Management
 

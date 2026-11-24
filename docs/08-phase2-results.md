@@ -76,3 +76,18 @@ Các lượt thử lại lấp đủ 40 ghế khi có đủ nhu cầu và giữ 
 Hai JAR chạy theo thứ tự `dev` rồi Phase 2 trên máy dùng chung với tiến trình phát tải. Đồng hồ của benchmark chính có độ phân giải khoảng 16 ms trên Windows. Mức 40 người dùng ảo là kịch bản đo tải cố định, còn các đợt 160 client có yêu cầu bắt đầu rải trong tối đa khoảng 0,3 giây. Kết quả áp dụng cho cấu hình local này. Đo tải nhiều instance và chạy kéo dài vẫn thuộc [kế hoạch tối ưu](07-optimization-team-plan.md).
 
 [Số liệu theo từng lượt và cấu hình đo](../load-tests/results/phase2-before-after.json)
+
+## Kiểm tra bổ sung về bảo mật và dữ liệu
+
+Hai backend và một Redis chạy trong Compose kiểm thử. Với quota đăng nhập đặt là 2, hai yêu cầu từ cùng nguồn qua hai backend đều qua bộ giới hạn, còn yêu cầu thứ ba nhận `429`. Qua Nginx, thay đổi giá trị `X-Forwarded-For` do client gửi vẫn dùng chung quota của địa chỉ kết nối thực tế. Khi Redis dừng, yêu cầu auth trả `503` kèm `Retry-After` và yêu cầu đọc danh mục công khai vẫn trả `200`.
+
+Flyway đã chạy V22 trên DB kiểm thử có V21 và khởi tạo một DB trống đến V22. Bộ Maven chạy 293 test với PostgreSQL và Redis, bao gồm cạnh tranh ghế cuối, rollback giữ ghế khi insert booking thất bại và chia sẻ quota với hai kết nối Redis.
+
+Dùng `EXPLAIN (ANALYZE, BUFFERS)` trên bộ dữ liệu riêng gồm 50.000 chuyến và 100.000 booking. Hai truy vấn được chạy có và không có ba index V22 trong cùng transaction kiểm thử.
+
+| Truy vấn | Kế hoạch khi có V22 | Execution Time không có → có V22 |
+|---|---|---:|
+| Đếm ghế xác nhận theo chuyến | `Index Scan` qua `idx_bookings_trip_status` | 5,984 → 0,222 ms |
+| Lọc các chuyến tới mốc chuyển trạng thái | `BitmapOr` qua hai partial index | 3,700 → 0,016 ms |
+
+Các thời gian trên là quan sát của từng query plan trên fixture này. Phần benchmark API trước/sau ở trên dùng bản Phase 2 tại `e43c7c5`.

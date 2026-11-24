@@ -263,6 +263,8 @@ Các khóa `PRIMARY KEY`/`UNIQUE` tạo hoặc dựa trên index tương ứng t
 
 V20 thêm hai partial index cho chuyến `SCHEDULED` còn ghế theo `(departure_time, id)` và `(route_id, departure_time, id)`. Index `bookings(user_id, booked_at DESC, id DESC)` hỗ trợ phân trang lịch sử cá nhân.
 
+V22 thêm index `bookings(trip_id, status)` để quản trị tra cứu và đếm ghế xác nhận theo chuyến. Hai partial index theo giờ đi của chuyến `SCHEDULED` và giờ đến của chuyến `IN_PROGRESS` hỗ trợ job chuyển trạng thái, kể cả khi chuyến đã hết ghế.
+
 ## 2.6. Migration Phase 2
 
 | Phiên bản | Thay đổi |
@@ -272,6 +274,7 @@ V20 thêm hai partial index cho chuyến `SCHEDULED` còn ghế theo `(departure
 | V19 | `verification_outbox` giữ nội dung OTP đã mã hóa, số lần gửi và thời điểm có thể thử lại. Worker xóa nội dung mã hóa khi hoàn tất hoặc hết hạn. |
 | V20 | Thêm index tìm chuyến còn ghế và phân trang lịch sử. |
 | V21 | Mở rộng `bookings.total_amount` thành `NUMERIC(22,2)`. |
+| V22 | Thêm index booking theo chuyến và partial index tìm chuyến tới mốc chuyển trạng thái. |
 
 Trước khi áp dụng V18 vào DB có dữ liệu cũ, kiểm tra lịch trùng bằng truy vấn dưới đây. Migration sẽ dừng với ID của một cặp chuyến xung đột nếu còn dữ liệu cần xử lý. Tài khoản migration cần quyền tạo extension `btree_gist` hoặc extension phải được quản trị DB cài trước.
 

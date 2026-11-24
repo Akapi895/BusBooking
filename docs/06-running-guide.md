@@ -85,6 +85,16 @@ Thoát chế độ xem log bằng `Ctrl+C` (không dừng container).
 docker compose down
 ```
 
+**Dùng chung quota xác thực qua Redis.** Khởi chạy Compose với tệp bổ sung:
+
+```powershell
+docker compose -f compose.yaml -f compose.auth-rate-limit.yaml up -d --build
+```
+
+Redis chạy trên mạng riêng của Compose. Backend mặc định dùng bộ đếm local, còn tệp bổ sung bật `AUTH_RATE_LIMIT_BACKEND=redis`. Khi triển khai nhiều backend, dùng chung Redis, `AUTH_RATE_REDIS_PREFIX` và các giá trị quota. Có thể cấu hình kết nối Redis ngoài Compose bằng các biến `SPRING_DATA_REDIS_*`.
+
+Nginx ghi `X-Forwarded-For` từ kết nối trực tiếp. Cấu hình Compose tin địa chỉ proxy `172.31.241.2`. Khi triển khai ở mạng khác, dùng địa chỉ chính xác của proxy tin cậy và cấu hình proxy ghi đè header do client gửi.
+
 > **Không dùng `docker compose down -v`** khi muốn giữ dữ liệu. Compose hiện có backend service; khi dùng cách 2 để chạy Java local, dừng backend Compose nếu đang chạy (`docker compose stop backend`), chỉ khởi động `postgres` và dùng SMTP truy cập được từ host theo mục 6.5.
 
 ## 6.5. Cách 2: Chạy Spring Boot trực tiếp trên Windows
@@ -200,13 +210,14 @@ Baseline hiệu năng GET Trip / POST Booking Pha 1 trên Kaggle CPU, script Loc
 | Hiện tượng | Kiểm tra / xử lý |
 |---|---|
 | `Connection refused` PostgreSQL | `docker compose ps` hoặc `docker ps`; kiểm tra đúng **cổng host**, database, user, password và network |
-| Flyway checksum mismatch / missing table | Đối chiếu migration V1–V21 với lịch sử DB. |
+| Flyway checksum mismatch / missing table | Đối chiếu migration V1–V22 với lịch sử DB. |
 | PostgreSQL từ chối múi giờ `Asia/Saigon` | Đặt JVM option `-Duser.timezone=Asia/Ho_Chi_Minh` khi chạy từ IDE hoặc JAR trực tiếp. |
 | Backend không lên vì JWT/OTP secret | Kiểm tra ba secret Base64 độc lập. JWT và HMAC OTP cần ít nhất 32 byte, còn khóa outbox cần đúng 32 byte sau giải mã. |
 | Không nhận OTP | Kiểm tra SMTP, Mailpit và log worker. Khi chạy backend trên host, dùng cổng SMTP publish ra host. Worker thử lại với giãn cách tăng dần, tối đa 8 lần trong thời hạn OTP. |
 | Swagger trả 404 | Kiểm tra profile `dev`, `API_DOCS_ENABLED` và cổng publish backend |
 | HTTP `401` / `403` | Kiểm tra JWT, trạng thái xác minh email, role và ownership; đây có thể là phản hồi phân quyền đúng |
 | HTTP `429` khi thử auth | Rate limit đăng ký/đăng nhập/OTP; chờ hết cửa sổ giới hạn thay vì gọi liên tục |
+| HTTP `503` ở endpoint auth khi bật Redis | Kiểm tra kết nối Redis. Auth trả `Retry-After` trong khi chưa xác định được quota. |
 | Port 8085/8086/5435/1025/8025/8026 bị chiếm | Dùng `docker ps`, `Get-NetTCPConnection -State Listen`; điều chỉnh cổng phù hợp trong cấu hình |
 | Chạy Java trong container không kết nối được DB | JDBC URL không được dùng `localhost` để chỉ container PostgreSQL khác; dùng tên service/network thực tế |
 
