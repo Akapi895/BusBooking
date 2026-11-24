@@ -14,4 +14,65 @@ Kiểm tra ngày 24/11/2026 trên Java 21, PostgreSQL 16 và Mailpit. PostgreSQL
 
 Chạy lại test Java bằng `mvn -B verify` với PostgreSQL kiểm thử. Xem cách chạy smoke và acceptance trong [hướng dẫn kiểm thử tải](../load-tests/ACCEPTANCE.md).
 
-Chưa có benchmark trước/sau hoặc số liệu p95/p99 ở tải lớn. Rate limit và giới hạn yêu cầu theo chuyến hiện chạy ở từng instance. RabbitMQ, Redis và đo tải nhiều instance thuộc kiến trúc đích trong [kế hoạch tối ưu](07-optimization-team-plan.md).
+## Benchmark trước và sau
+
+Bản trước là `dev` tại `919bcef`. Bản sau là Phase 2 tại `e43c7c5`. Hai JAR chạy lần lượt trên cùng máy Windows 16 luồng, với cùng Java 21, heap tối đa 1 GiB và cấu hình PostgreSQL 16.15 trong Docker giới hạn 2 CPU và 2 GiB RAM. Mỗi bản dùng một DB mới với cùng cách sinh dữ liệu gồm 50.000 chuyến tương lai, 100 tuyến và 500 tài khoản tải.
+
+- Tìm chuyến dùng cùng bộ lọc điểm đi, điểm đến và ngày khởi hành. Đặt vé rải đều gửi một ghế mỗi yêu cầu với `Idempotency-Key` riêng. Hai kịch bản chạy 40 người dùng ảo, nghỉ ngẫu nhiên 30–70 ms giữa các yêu cầu, khởi động tải 8 giây và đo 18 giây mỗi lượt. Mỗi bản lặp ba lần.
+- Danh sách không lọc dùng một client gửi tuần tự với ba lượt làm nóng và 12 mẫu đo. Đo số chuyến, số byte JSON và thời gian nhận đủ phản hồi.
+- Tranh ghế dùng một chuyến mới có 40 ghế mỗi lượt. Chạy ba đợt cho từng mức 20, 80 và 160 client. Đếm mã HTTP, ghi độ trễ rồi đối soát số booking và ghế trong PostgreSQL.
+
+### Tìm chuyến và đặt vé rải đều
+
+Các giá trị là trung vị của ba lượt. Khoảng trong ngoặc là giá trị thấp nhất và cao nhất đo được.
+
+| Kịch bản | Chỉ số | `dev` | Phase 2 |
+|---|---|---:|---:|
+| Tìm chuyến có bộ lọc | p95 (ms) | 250 (109–328) | 16 (16–47) |
+| Tìm chuyến có bộ lọc | p99 (ms) | 328 (140–437) | 31 (16–78) |
+| Tìm chuyến có bộ lọc | Phản hồi thành công/giây | 225,0 (187,0–450,5) | 695,1 (584,2–723,6) |
+| Đặt vé rải đều | p95 (ms) | 234 (140–375) | 203 (93–250) |
+| Đặt vé rải đều | p99 (ms) | 359 (203–531) | 282 (125–375) |
+| Đặt vé rải đều | Booking thành công/giây | 223,4 (170,1–321,7) | 331,2 (225,2–416,6) |
+
+Tìm chuyến có cùng bộ lọc có p95 thấp hơn trong cả ba lượt Phase 2. Đặt vé rải đều cho trung vị tốt hơn nhưng khoảng dao động giữa hai bản chồng lên nhau và CPU máy đo chạm 100% ở một số lượt. Cả hai bản trả thành công mọi yêu cầu đo được trong hai kịch bản này, với 0 booking đã commit mà client chưa nhận biết.
+
+### Danh sách không lọc
+
+| Chỉ số | `dev` | Phase 2 |
+|---|---:|---:|
+| Chuyến trong mỗi phản hồi | 50.000 | 20 |
+| Trung vị kích thước JSON | 23.216.895 byte | 9.180 byte |
+| Trung vị thời gian nhận phản hồi | 1.812 ms | 16 ms |
+
+Khác biệt này đo số dữ liệu mà client phải nhận khi mở danh sách lần đầu. Phase 2 chỉ trả trang đầu mặc định.
+
+### Tranh ghế cùng một chuyến
+
+Bảng ghi số phản hồi theo khoảng của ba lượt và p95 của mọi mã HTTP theo trung vị, với mỗi client chỉ gửi một lần.
+
+| Client | `dev` 201 / 409 / 503 | Phase 2 201 / 409 / 503 | p95 `dev` → Phase 2 |
+|---:|---|---|---:|
+| 20 | 20 / 0 / 0 | 9–10 / 0 / 10–11 | 297 → 62 ms |
+| 80 | 40 / 40 / 0 | 17–21 / 0 / 59–63 | 907 → 157 ms |
+| 160 | 40 / 120 / 0 | 25–28 / 0 / 132–135 | 1.531 → 297 ms |
+
+Phase 2 trả `503` kèm `Retry-After` khi chạm giới hạn theo chuyến, kể cả khi chuyến còn ghế. Ở 160 client, p95 riêng cho phản hồi thành công giảm từ 578 xuống 359 ms. Tất cả các lượt đối soát đúng số vé đã xác nhận, ghế còn lại và tổng tiền.
+
+### Khi client thử lại sau 503
+
+Chạy thêm một lượt mỗi mức trên Phase 2 với DB riêng có 100 chuyến. Mỗi client chỉ thử lại sau `503`, dùng cùng key, chờ `Retry-After` cộng 0–400 ms và thử lại tối đa ba lần.
+
+| Client | Booking ở lần gửi đầu | Booking sau thử lại | Phản hồi cuối 409 / 503 | p95 từ lần gửi đầu đến kết quả cuối |
+|---:|---:|---:|---:|---:|
+| 20 | 8 | 20 | 0 / 0 | 1,77 giây |
+| 80 | 15 | 40 | 40 / 0 | 2,35 giây |
+| 160 | 24 | 40 | 120 / 0 | 2,54 giây |
+
+Các lượt thử lại lấp đủ 40 ghế khi có đủ nhu cầu và giữ đúng một booking trên mỗi client thành công. Thời gian chờ thử lại được tính trong độ trễ cuối.
+
+### Giới hạn phép đo
+
+Hai JAR chạy theo thứ tự `dev` rồi Phase 2 trên máy dùng chung với tiến trình phát tải. Đồng hồ của benchmark chính có độ phân giải khoảng 16 ms trên Windows. Mức 40 người dùng ảo là kịch bản đo tải cố định, còn các đợt 160 client có yêu cầu bắt đầu rải trong tối đa khoảng 0,3 giây. Kết quả áp dụng cho cấu hình local này. Đo tải nhiều instance và chạy kéo dài vẫn thuộc [kế hoạch tối ưu](07-optimization-team-plan.md).
+
+[Số liệu theo từng lượt và cấu hình đo](../load-tests/results/phase2-before-after.json)
