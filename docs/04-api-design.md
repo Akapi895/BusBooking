@@ -176,6 +176,8 @@ Khi tạo booking, PostgreSQL giảm ghế và trả giá bằng một `UPDATE �
 
 Chỉ chấp nhận `USER` hoặc `ADMIN`. Nâng từ USER lên ADMIN yêu cầu tài khoản đủ điều kiện (ACTIVE, đã xác minh email); không hỗ trợ cấp/hạ `SUPER_ADMIN` bằng API này. Thành công trả `200 UserResponse`; mức quyền trên request tiếp theo phản ánh trạng thái role lưu trong database.
 
+Sau khi giao dịch đổi quyền thành công, backend ghi sự kiện `role_changed` ở mức INFO. Nhật ký gồm ID người thao tác, ID tài khoản đích, vai trò trước và sau. Yêu cầu giữ nguyên vai trò, bị từ chối hoặc rollback không sinh sự kiện đổi quyền.
+
 ### 4.3.6. Admin Trip và Booking
 
 | API | Tham số / dữ liệu | Quy tắc chính |

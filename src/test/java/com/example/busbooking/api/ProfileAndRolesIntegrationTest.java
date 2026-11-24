@@ -8,6 +8,11 @@ import com.example.busbooking.domain.enums.*;
 import com.example.busbooking.domain.exception.*;
 import com.example.busbooking.domain.model.User;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -43,6 +48,7 @@ class ProfileAndRolesIntegrationTest {
     @Autowired RoleRepository roles;
     @Autowired RoleManagementRepository roleChanges;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactions;
     @MockitoBean EmailVerificationSender sender;
     private final Map<String, String> codes = new ConcurrentHashMap<>();
 
@@ -199,6 +205,29 @@ class ProfileAndRolesIntegrationTest {
                 .andExpect(status().isBadRequest());
         mvc.perform(put("/api/admin/users/1/role").contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void recordsOnlyCommittedRoleChanges(CapturedOutput output) {
+        rootToken();
+        userToken(EMPLOYEE);
+        long actor = users.findSuperAdmin().orElseThrow().getId();
+        long target = users.findByEmail(EMPLOYEE).orElseThrow().getId();
+        String event = "event=role_changed actorId=" + actor + " targetId=" + target;
+
+        roleChanges.changeRole(actor, target, RoleName.USER);
+        assertThatThrownBy(() -> roleChanges.changeRole(target, actor, RoleName.ADMIN))
+                .isInstanceOf(ForbiddenOperationException.class);
+        new TransactionTemplate(transactions).executeWithoutResult(transaction -> {
+            roleChanges.changeRole(actor, target, RoleName.ADMIN);
+            transaction.setRollbackOnly();
+        });
+        assertThat(output.getAll()).doesNotContain(event);
+        assertThat(users.findById(target).orElseThrow().getRole().getName()).isEqualTo(RoleName.USER);
+
+        roleChanges.changeRole(actor, target, RoleName.ADMIN);
+        assertThat(output.getAll()).containsOnlyOnce(event + " previousRole=USER newRole=ADMIN");
     }
 
     @Test

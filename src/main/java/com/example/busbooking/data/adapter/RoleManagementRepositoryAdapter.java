@@ -3,7 +3,9 @@ package com.example.busbooking.data.adapter;
 import com.example.busbooking.business.port.repository.*;
 import com.example.busbooking.domain.enums.RoleName;
 import com.example.busbooking.domain.exception.*;
+import com.example.busbooking.domain.model.RoleChanged;
 import com.example.busbooking.domain.model.User;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,8 +15,12 @@ import java.util.List;
 public class RoleManagementRepositoryAdapter implements RoleManagementRepository {
     private final JdbcTemplate jdbc;
     private final UserRepository users;
-    public RoleManagementRepositoryAdapter(JdbcTemplate jdbc, UserRepository users) {
-        this.jdbc = jdbc; this.users = users;
+    private final ApplicationEventPublisher events;
+
+    public RoleManagementRepositoryAdapter(JdbcTemplate jdbc, UserRepository users, ApplicationEventPublisher events) {
+        this.jdbc = jdbc;
+        this.users = users;
+        this.events = events;
     }
 
     @Override
@@ -33,6 +39,7 @@ public class RoleManagementRepositoryAdapter implements RoleManagementRepository
             var roleIds = jdbc.queryForList("SELECT id FROM roles WHERE name = ?", Long.class, role.name());
             if (roleIds.isEmpty()) { throw new IllegalStateException("Required managed role is missing"); }
             jdbc.update("UPDATE users SET role_id = ? WHERE id = ?", roleIds.getFirst(), targetId);
+            events.publishEvent(new RoleChanged(actorId, targetId, target.role(), role));
         }
         return users.findById(targetId).orElseThrow(ResourceNotFoundException::new);
     }
