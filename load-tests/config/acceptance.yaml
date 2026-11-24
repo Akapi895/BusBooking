@@ -1,0 +1,54 @@
+# All durations are seconds. No maximum VU: budgets/validity determine stopping.
+seed: 20261115
+profile: acceptance
+workloads: [read, write, mixed, hotspot]
+fixture:
+  users: 10000
+  trips: 50000
+  capacity: 40
+load:
+  initial_vu: 20
+  growth: 1.6
+  relative_precision: 0.05
+  overload_factor: 1.10
+  overload_probes: 2
+  spawn_rate: 50
+  settle_seconds: 30
+  measure_seconds: 120
+  confirm_seconds: 300
+  confirm_repeats: 3
+  warmup_seconds: 180
+  discovery_warmup_seconds: 60
+  recovery_seconds: 120
+  spike_seconds: 60
+  soak_seconds: 3600
+  discovery_budget_seconds: 5400
+  workload_budget_seconds: 10800
+  total_budget_seconds: 39600
+  think_min: 0.2
+  think_max: 0.6
+  connect_timeout: 5
+  read_timeout: 15
+  drain_seconds: 25
+  slo_read_p95_ms: 300
+  slo_write_p95_ms: 500
+  max_unexpected_error_ratio: 0.001
+  generator_max_cpu_per_core: 90
+  generator_max_lag_ms: 100
+  generator_max_lag_fraction: 0.05
+  abort_error_ratio: 0.20
+  abort_error_windows: 3
+concurrency:
+  bursts: [2, 10, 50, 100]
+  rounds: 100
+  last_seats: [1, 2, 10]
+  timeout: 45
+runtime:
+  # Same heap/timezone as the historical notebook. No pool/index/rate-limit tuning.
+  jvm_args: [-Xms256m, -Xmx1024m, -Duser.timezone=UTC]
+  port: 8085
+  pg_port: 55439
+  mailpit_version: v1.32.0
+  startup_timeout: 180
+  enable_faults: true
+  enable_jfr_diagnostic: true
