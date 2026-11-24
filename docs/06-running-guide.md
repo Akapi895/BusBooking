@@ -221,3 +221,9 @@ Baseline hiệu năng GET Trip / POST Booking Pha 1 trên Kaggle CPU, script Loc
 | Port 8085/8086/5435/1025/8025/8026 bị chiếm | Dùng `docker ps`, `Get-NetTCPConnection -State Listen`; điều chỉnh cổng phù hợp trong cấu hình |
 | Chạy Java trong container không kết nối được DB | JDBC URL không được dùng `localhost` để chỉ container PostgreSQL khác; dùng tên service/network thực tế |
 
+
+### Kiểm tra Flyway từ V16
+
+Chạy riêng bằng mvn -B -Dtest=FlywayUpgradeIntegrationTest test, hoặc chạy mvn -B verify như CI.
+Dùng PostgreSQL 16 dành riêng cho kiểm thử. Tài khoản TEST_DB_USERNAME cần quyền CREATEDB để suite tạo và dọn các DB kiểm thử riêng trong cùng cụm.
+Suite kiểm tra cài schema trên DB trống, nâng cấp dữ liệu V16 và xác nhận chạy lại migration không làm mất dữ liệu.
