@@ -43,7 +43,7 @@ public class AuthController {
             @ApiResponse(responseCode = "409", description = "Email already registered", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "503", description = "SMTP unavailable; account remains pending", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @Operation(summary = "Register a USER and send an email verification code")
+    @Operation(summary = "Register a USER and request an email verification code")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore())
                 .body(mapper.user(auth.register(mapper.command(request))));
@@ -70,7 +70,7 @@ public class AuthController {
     public ResponseEntity<MessageResponse> resend(@Valid @RequestBody ResendVerificationRequest request) {
         verification.resend(request.email());
         return ResponseEntity.accepted().cacheControl(CacheControl.noStore())
-                .body(new MessageResponse("If the account is eligible, a verification email has been sent"));
+                .body(new MessageResponse("If the account is eligible, a verification email has been requested"));
     }
 
     @GetMapping("/me")

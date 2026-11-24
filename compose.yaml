@@ -41,6 +41,7 @@ services:
 
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET_required}
       EMAIL_OTP_SECRET: ${EMAIL_OTP_SECRET:?EMAIL_OTP_SECRET_required}
+      OTP_OUTBOX_SECRET: ${OTP_OUTBOX_SECRET:?OTP_OUTBOX_SECRET_required}
 
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
