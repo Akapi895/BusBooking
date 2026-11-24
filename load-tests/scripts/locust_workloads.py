@@ -209,6 +209,8 @@ class AcceptanceUser(HttpUser):
         if "?" in path:
             name += " [filtered]"
         headers = {"Authorization": "Bearer " + self.token} if authenticated else {}
+        if method == "POST" and path == "/api/bookings":
+            headers["Idempotency-Key"] = body["passengerName"]
         with self.client.request(method, path, name=name, json=body, headers=headers,
                 timeout=(LOAD["connect_timeout"], LOAD["read_timeout"]), catch_response=True, context=context) as response:
             context = response.request_meta["context"]
@@ -216,7 +218,10 @@ class AcceptanceUser(HttpUser):
                 data = response.json() if response.content else None
             except ValueError:
                 data = None
-            if hot and response.status_code == 409 and isinstance(data, dict) and data.get("error") == "INSUFFICIENT_SEATS":
+            exhausted = response.status_code == 409 and isinstance(data, dict) and data.get("error") == "INSUFFICIENT_SEATS"
+            busy = (response.status_code == 503 and isinstance(data, dict)
+                    and data.get("error") == "SERVICE_UNAVAILABLE" and response.headers.get("Retry-After") == "1")
+            if hot and (exhausted or busy):
                 context["expected_rejection"] = True
                 response.success()
             elif response.status_code != expected:
@@ -238,12 +243,13 @@ class AcceptanceUser(HttpUser):
         choice = random.random()
         if choice < 0.55:
             path = f"/api/trips?originId={trip['origin']}&destinationId={trip['destination']}&departureDate={trip['date']}"
-            self.call("GET", path, validate=lambda data: isinstance(data, list) and bool(data) and all(
+            self.call("GET", path, validate=lambda data: isinstance(data, list) and len(data) <= 20 and all(
                 x.get("departureTime", "")[:10] == trip["date"] and x.get("routeId") == trip["route"] for x in data))
         elif choice < 0.90:
             self.call("GET", f"/api/trips/{trip['id']}", validate=lambda data: isinstance(data, dict) and data.get("id") == trip["id"])
         elif choice < 0.95:
-            self.call("GET", "/api/trips", validate=lambda data: isinstance(data, list) and len(data) == len(FIXTURE["trips"]))
+            self.call("GET", "/api/trips", validate=lambda data: isinstance(data, list) and len(data) <= 20 and all(
+                item.get("status") == "SCHEDULED" and item.get("availableSeats", 0) > 0 for item in data))
         else:
             self.call("GET", "/api/locations?q=Load", validate=lambda data: isinstance(data, list) and len(data) > 0)
 

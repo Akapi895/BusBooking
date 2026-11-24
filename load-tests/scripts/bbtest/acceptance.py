@@ -1,4 +1,4 @@
-"""Black-box contracts and adversarial schedules against the unchanged application."""
+"""Black-box contracts and concurrent schedules against the application."""
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -26,11 +26,13 @@ class Acceptance:
         uid = self.fx.data["principals"][who]["id"] if isinstance(who, str) else who
         return jwt(uid, self.rt.secret)
 
-    def request(self, method, path, who="USER", body=None, expected=None, timeout=45, raw_token=None):
+    def request(self, method, path, who="USER", body=None, expected=None, timeout=45, raw_token=None, key=None):
         start = time.time()
         headers = {"Authorization": "Bearer " + self.token(who)} if who is not None else {}
         if raw_token is not None:
             headers = {"Authorization": "Bearer " + raw_token}
+        if key is not None:
+            headers["Idempotency-Key"] = key
         response = requests.request(method, self.rt.url + path, json=body, headers=headers, timeout=(5, timeout))
         try:
             result = response.json() if response.content else None
@@ -49,6 +51,8 @@ class Acceptance:
         if response.status_code >= 400:
             assert isinstance(result, dict) and {"status", "error", "message", "path"} <= result.keys(), "Error envelope missing"
             assert result["status"] == response.status_code, "Error status mismatch"
+        if result and isinstance(result, dict) and result.get("error") == "SERVICE_UNAVAILABLE":
+            assert response.headers.get("Retry-After") == "1", "Missing retry delay"
         return response.status_code, result
 
     def case(self, name, action):
@@ -68,10 +72,10 @@ class Acceptance:
         print(name, result["status"], flush=True)
         return result
 
-    def book(self, trip, who="USER", quantity=1, expected=None, timeout=45):
+    def book(self, trip, who="USER", quantity=1, expected=None, timeout=45, key=None):
         return self.request("POST", "/api/bookings", who,
             {"tripId": trip, "passengerName": "Acceptance", "passengerPhone": "0901234567", "quantity": quantity},
-            expected, timeout)
+            expected, timeout, key=key)
 
     def counts(self, trip):
         with self.rt.connect() as conn:
@@ -94,13 +98,18 @@ class Acceptance:
     def otp(self, email, timeout=20):
         end = time.monotonic() + timeout
         while time.monotonic() < end:
-            messages = requests.get("http://127.0.0.1:8025/api/v1/messages", timeout=5).json()["messages"]
-            for message in messages:
-                if any(address.get("Address") == email for address in message.get("To", [])):
-                    text = requests.get("http://127.0.0.1:8025/api/v1/message/" + message["ID"], timeout=5).json().get("Text", "")
-                    code = verification_code(text)
-                    if code:
-                        return code
+            try:
+                inbox = requests.get("http://127.0.0.1:8025/api/v1/messages", timeout=3)
+                inbox.raise_for_status()
+                for message in inbox.json()["messages"]:
+                    if any(address.get("Address") == email for address in message.get("To", [])):
+                        response = requests.get("http://127.0.0.1:8025/api/v1/message/" + message["ID"], timeout=3)
+                        response.raise_for_status()
+                        code = verification_code(response.json().get("Text", ""))
+                        if code:
+                            return code
+            except requests.RequestException:
+                pass
             time.sleep(0.2)
         raise AssertionError("OTP not delivered for test recipient")
 
@@ -229,10 +238,13 @@ class Acceptance:
             values, spread = self.burst([lambda uid=uid: self.book(trip, uid, quantity)
                                          for uid in self.fx.data["users"][:n]])
             codes = Counter(v[0] for v in values)
-            assert codes[201] == winners and codes[409] == n - winners, dict(codes)
+            assert set(codes) <= {201, 409, 503} and sum(codes.values()) == n, dict(codes)
+            assert codes[201] == min(seats // quantity, n - codes[503]), dict(codes)
+            assert codes[201] <= winners
             assert all(body.get("error") == "INSUFFICIENT_SEATS" for code, body in values if code == 409)
+            assert all(body.get("error") == "SERVICE_UNAVAILABLE" for code, body in values if code == 503)
             left, bookings, confirmed, _ = self.counts(trip)
-            assert left == seats - winners * quantity and bookings == winners and confirmed == winners * quantity
+            assert left == seats - codes[201] * quantity and bookings == codes[201] and confirmed == codes[201] * quantity
             evidence.append({"round": i, "burst": n, "capacity": seats, "quantity": quantity,
                              "codes": dict(codes), "dispatch_spread_ms": spread})
         return evidence
@@ -264,9 +276,12 @@ class Acceptance:
             left, count, confirmed, status = self.counts(trip)
             assert (status == "SCHEDULED" and confirmed == 1 and left == 1) or (status == "CANCELLED" and count == 0 and left == 2)
             trip, _ = self.fx.new_trip(2)
-            _, small = self.fx.new_trip(1)
+            small = self.fx.new_vehicle(1)
+            _, current = self.request("GET", f"/api/trips/{trip}", None, expected=200)
+            body = self.fx.trip_body(small)
+            body.update(departureTime=current["departureTime"], arrivalTime=current["arrivalTime"])
             values, _ = self.burst([lambda: self.book(trip, quantity=2),
-                lambda: self.request("PUT", f"/api/admin/trips/{trip}", "ADMIN", self.fx.trip_body(small))])
+                lambda: self.request("PUT", f"/api/admin/trips/{trip}", "ADMIN", body)])
             assert tuple(v[0] for v in values) in ((201, 409), (409, 200)), [v[0] for v in values]
             evidence.append({"booking_trip_cancel": codes, "dispatch_spread_ms": spread,
                              "booking_vehicle_change": [v[0] for v in values]})
@@ -302,7 +317,7 @@ class Acceptance:
                 body = {"originId": self.fx.data["locations"][0], "destinationId": destination["id"], "estimatedDurationMinutes": 120}
             _, item = self.request("POST", "/api/admin/" + resource, "ADMIN", body, 201)
             update = dict(body, status="INACTIVE")
-            trip = self.fx.trip_body(item["id"] if resource == "vehicles" else None)
+            trip = self.fx.trip_body(item["id"] if resource == "vehicles" else self.fx.new_vehicle())
             if resource == "routes":
                 trip["routeId"] = item["id"]
             values, spread = self.burst([
@@ -358,7 +373,7 @@ class Acceptance:
         hashed = hmac.new(base64.b64decode(self.rt.otp_secret), (pending["email"] + "\n" + code).encode(), hashlib.sha256).hexdigest()
         with self.rt.connect() as conn:
             conn.execute("INSERT INTO email_verifications(user_id,code_hash,sent_at,expires_at,failed_attempts) "
-                "VALUES(%s,%s,now()-interval '1 minute',now()+interval '3 seconds',0)", (pending["id"], hashed))
+                "VALUES(%s,%s,now()-interval '1 minute',now()+interval '1.5 seconds',0)", (pending["id"], hashed))
         with ThreadPoolExecutor(max_workers=1) as pool:
             with self.rt.connect() as lock:
                 lock.execute("SELECT id FROM users WHERE id=%s FOR UPDATE", (pending["id"],))
@@ -372,7 +387,7 @@ class Acceptance:
                     if blocked:
                         break
                     time.sleep(0.1)
-                time.sleep(4)
+                time.sleep(1.6)
             code, _ = future.result(timeout=45)
         assert blocked, "Could not observe verification waiting for the account lock"
         assert code == 400
@@ -406,10 +421,11 @@ class Acceptance:
 
     def timeout_semantics(self):
         trip, _ = self.fx.new_trip(3)
+        key = secrets.token_hex(16)
         with self.rt.connect() as lock:
             lock.execute("SELECT id FROM trips WHERE id=%s FOR UPDATE", (trip,))
             with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(self.book, trip, "USER", 1, None, 0.4)
+                future = pool.submit(self.book, trip, "USER", 1, None, 0.4, key)
                 try:
                     future.result(timeout=5)
                     raise AssertionError("Expected a client timeout")
@@ -420,27 +436,37 @@ class Acceptance:
                 break
             time.sleep(0.1)
         assert self.counts(trip)[:3] == (2, 1, 1)
-        self.book(trip, expected=201)
-        assert self.counts(trip)[:3] == (1, 2, 2)
-        return {"client_timeout_can_commit": True, "retry_created_second_booking": True,
-                "gap": "No idempotency key in current API; exactly-once is NOT verified"}
+        _, replay = self.book(trip, expected=201, key=key)
+        self.book(trip, quantity=2, expected=409, key=key)
+        with self.rt.connect() as conn:
+            assert conn.execute("SELECT id FROM bookings WHERE trip_id=%s", (trip,)).fetchone()[0] == replay["id"]
+        assert self.counts(trip)[:3] == (2, 1, 1)
+        return {"client_timeout_can_commit": True, "same_key_replayed": True, "different_payload_rejected": True}
 
     def smtp_fault(self):
         self.rt.restart_app()
         self.rt.stop(self.rt.mail)
         email = secrets.token_hex(7) + "@acceptance.example"
         try:
-            self.registration(email, 503)
+            self.registration(email)
             with self.rt.connect() as conn:
-                row = conn.execute("SELECT u.email_verified,count(e.user_id) FROM users u JOIN email_verifications e ON e.user_id=u.id "
-                    "WHERE email=%s GROUP BY u.id", (email,)).fetchone()
+                row = conn.execute("SELECT u.email_verified,count(o.user_id) FROM users u JOIN verification_outbox o ON o.user_id=u.id "
+                    "WHERE email=%s AND o.finished_at IS NULL GROUP BY u.id", (email,)).fetchone()
             assert row == (False, 1)
+            deadline = time.monotonic() + 12
+            while time.monotonic() < deadline:
+                with self.rt.connect() as conn:
+                    retried = conn.execute("SELECT EXISTS(SELECT 1 FROM verification_outbox o JOIN users u ON u.id=o.user_id "
+                        "WHERE u.email=%s AND o.attempts>0 AND o.lease_until IS NULL AND o.finished_at IS NULL)", (email,)).fetchone()[0]
+                if retried:
+                    break
+                time.sleep(0.2)
+            else:
+                raise AssertionError("Worker did not schedule a retry during the SMTP outage")
         finally:
             self.rt.start_mail()
-        time.sleep(61)  # Exercise the actual cooldown, not a different application policy.
-        self.request("POST", "/api/auth/resend-verification", None, {"email": email}, 202)
         self.request("POST", "/api/auth/verify-email", None, {"email": email, "code": self.otp(email)}, 204)
-        return {"pending_account_recovered": True}
+        return {"pending_account_recovered": True, "worker_retried_without_resend": True}
 
     def db_fault(self):
         self.rt.pg_command([self.rt.pgbin / "pg_ctl", "-D", self.rt.pgdir / "data", "-m", "fast", "-w", "stop"])
@@ -490,10 +516,13 @@ class Acceptance:
                 values = [future.result(timeout=50) for future in futures]
         finally:
             lock.close()
-        assert all(code == 201 for code, _ in values)
-        assert self.counts(trip)[:3] == (100 - len(users), len(users), len(users))
+        codes = Counter(code for code, _ in values)
+        assert set(codes) <= {201, 503} and codes[201] > 0
+        if len(users) > 8:
+            assert codes[503] > 0
+        assert self.counts(trip)[:3] == (100 - codes[201], codes[201], codes[201])
         self.request("GET", "/api/users/me", expected=200)
-        return {"submitted": len(users), "observed_db_lock_waiters": observed,
+        return {"submitted": len(users), "observed_db_lock_waiters": observed, "codes": dict(codes),
                 "elapsed_seconds": time.monotonic() - started, "completed_after_release": True,
                 "pool_occupancy": "not exposed; no pool exhaustion claim"}
 

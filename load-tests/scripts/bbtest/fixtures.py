@@ -62,19 +62,23 @@ class Fixtures:
                 "FROM users WHERE id=%s RETURNING id", (email, role, verified, self.data["users"][0])).fetchone()[0]
         return {"id": uid, "email": email}
 
-    def new_trip(self, capacity=40):
+    def new_vehicle(self, capacity=40):
         with self.rt.connect() as conn:
-            vehicle = conn.execute("INSERT INTO vehicles(operator_id,license_plate,vehicle_type,seat_capacity,status) "
+            return conn.execute("INSERT INTO vehicles(operator_id,license_plate,vehicle_type,seat_capacity,status) "
                 "VALUES(%s,%s,'BUS',%s,'ACTIVE') RETURNING id",
                 (self.data["operator"], "R-" + secrets.token_hex(7).upper(), capacity)).fetchone()[0]
+
+    def new_trip(self, capacity=40):
+        vehicle = self.new_vehicle(capacity)
+        with self.rt.connect() as conn:
             trip = conn.execute("INSERT INTO trips(route_id,vehicle_id,departure_time,arrival_time,price,available_seats,status) "
                 "VALUES(%s,%s,now()+interval '60 days',now()+interval '60 days 2 hours',150000,%s,'SCHEDULED') RETURNING id",
                 (self.data["routes"][0], vehicle, capacity)).fetchone()[0]
         return trip, vehicle
 
-    def trip_body(self, vehicle=None):
-        start = dt.datetime.now().replace(microsecond=0) + dt.timedelta(days=100)
-        return {"routeId": self.data["routes"][0], "vehicleId": vehicle or self.data["vehicles"][0],
+    def trip_body(self, vehicle):
+        start = dt.datetime.now(dt.timezone(dt.timedelta(hours=7))).replace(tzinfo=None, microsecond=0) + dt.timedelta(days=100)
+        return {"routeId": self.data["routes"][0], "vehicleId": vehicle,
                 "departureTime": start.isoformat(), "arrivalTime": (start + dt.timedelta(hours=2)).isoformat(), "price": 150000}
 
     def verify(self, marker=None, acknowledged=None):

@@ -49,7 +49,7 @@ Cập nhật dataset bằng kit mới và import notebook mới trước khi ch�
 
 - Chỉ chạy **JAR được upload**, không biên dịch, sửa service/controller, tạo index, thay pool, bỏ khóa, tắt constraint hoặc đổi rate limit.
 - Tạo một **PostgreSQL cluster mới**, chỉ bind loopback, DB/user ngẫu nhiên. Không kết nối DB dev/test có sẵn. App dùng profile `dev`, heap `-Xms256m -Xmx1024m`, timezone UTC giống notebook lịch sử. Ghi nhận phiên bản Java/PostgreSQL và cấu hình DB thực tế; không mặc định chúng giống môi trường sản xuất.
-- Mailpit thuộc suite, bind `127.0.0.1:1025/8025`. `SPRING_MAIL_HOST` khắc phục override localhost của profile dev mà không thay code hay logic SMTP.
+- Mailpit thuộc suite, bind `127.0.0.1:1025/8025`. Runtime cung cấp JWT secret, OTP HMAC secret và outbox secret độc lập cho JAR của mỗi lượt chạy.
 - Các biến Spring/DB/JWT/auth thừa kế được loại khỏi tiến trình app. Hai secret được tạo độc lập cho lượt chạy; không lưu secret/token vào báo cáo.
 - Tài khoản performance được seed SQL và dùng JWT fixture đúng HS256/sub/iss/iat/exp. JWT vẫn đi qua filter và DB role/active/verified như request thật. Luồng register → email OTP → verify → login được test qua HTTP riêng; không giả vờ rằng seed đã kiểm thử login.
 - SQL chỉ chuẩn bị fixture/đối soát và tạo lịch cạnh tranh trên dữ liệu test. Không thay schema/constraint để ép ứng dụng pass.
@@ -69,14 +69,14 @@ Cập nhật dataset bằng kit mới và import notebook mới trước khi ch�
 | Unique/update | Tạo trùng location/operator/vehicle/route; đăng ký trùng email; cập nhật profile nguyên tử theo chính sách last-writer-wins hiện có |
 | OTP | Verify một lần, resend nguyên tử/cooldown, 5 lần sai khóa mã, mã hết hạn trong lúc chờ account lock |
 | Rollback | Delete user fixture chưa commit → HTTP booking chờ FK → commit delete → lỗi lưu booking; kiểm tra không mất ghế, không có booking |
-| Timeout/retry | Giữ trip lock để client timeout, rồi quan sát commit và gửi lại; ghi rõ khoảng trống idempotency hiện có |
-| SMTP/DB faults | Dừng/khôi phục **Mailpit và PostgreSQL của suite**; pending account có thể resend/verify; backend phục hồi sau DB restart |
+| Timeout/retry | Giữ trip lock để client timeout, quan sát commit, rồi retry với cùng key. Xác nhận cùng booking ID và từ chối khi đổi payload. |
+| SMTP/DB faults | Dừng và khôi phục Mailpit và PostgreSQL của suite. Worker gửi lại OTP đã xếp hàng. Kiểm tra phản hồi quá tải khi giữ khóa và khả năng phục hồi sau DB restart. |
 | DB chậm/lock | Giữ root trip lock, phát 50 booking qua HTTP, quan sát nhiều DB waiters và hoàn tất sau release; không đoán kích thước/occupancy pool |
 | Performance | Read/write/mixed/hotspot, tìm thô → refine → probe cao hơn → xác nhận hai đầu tối thiểu 3 lần; diagnostic JFR riêng |
 | Endurance | Spike low→peak→low trong một tiến trình; kiểm tra target VU thực đạt; soak 1 giờ ở 65% mức low đã xác nhận |
 | Data | Ghế không âm/vượt capacity; ghế + vé CONFIRMED = capacity; tiền đúng; ID/owner của booking đã ACK tồn tại trong DB |
 
-Hủy chuyến có vé CONFIRMED phải bị từ chối. Hủy booking lặp lại phải bị từ chối và không hoàn ghế lần hai. OTP resend thành công trả **202**, verify trả **204**. Không thêm kỳ vọng hoàn tiền hay idempotency mà hệ thống chưa hỗ trợ.
+Hủy chuyến có vé CONFIRMED phải bị từ chối. Hủy booking lặp lại phải bị từ chối và chỉ hoàn ghế một lần. Yêu cầu gửi lại OTP trả **202** và xác minh thành công trả **204**. Khi kiểm thử hotspot, `409 INSUFFICIENT_SEATS` và `503 SERVICE_UNAVAILABLE` kèm `Retry-After` được đếm là từ chối dự kiến. Các workload thông thường vẫn tính `503` vào tỷ lệ lỗi.
 
 ## 4. Tìm vùng chịu tải không có trần VU cố định
 
@@ -145,7 +145,7 @@ Notebook cũng gọi exporter sau khi tiến trình suite kết thúc. Các dòn
 - Cả Java, DB và Locust đồng vị trí trên Kaggle. Dù generator chưa chạm ngưỡng cảnh báo, đây vẫn là công suất của **môi trường đồng vị trí**. Muốn kết luận backend độc lập phải chạy generator trên máy khác.
 - Thiếu metric occupancy của Hikari nếu ứng dụng chưa expose; không thêm Actuator, không đoán pool size. Dùng wait/thread/log làm bằng chứng hỗ trợ, không coi tương quan là nguyên nhân đã chứng minh.
 - CPU process 100% tương ứng một core. Affinity/quota và CPU máy được ghi riêng.
-- Không có idempotency key hiện tại: retry sau timeout có thể tạo booking thứ hai. Case PASS nghĩa là đã quan sát đúng hành vi hiện tại, **không phải đã đạt exactly-once**.
+- Kiểm thử retry dùng cùng `Idempotency-Key` theo tài khoản trong thời hạn hiệu lực 24 giờ.
 - Scan constant pool chỉ kiểm tra boundary hữu hạn; không thay thế toàn bộ kiểm chứng kiến trúc. Schema được test migrate mới và validate; không giả vờ đã test nâng cấp từ mọi version production cũ.
 - Số liệu native Windows/Linux smoke để xác nhận harness chạy được, không phải benchmark Kaggle hoặc bằng chứng đã đạt tải hàng nghìn VU.
 

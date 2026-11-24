@@ -29,6 +29,7 @@ class Runtime:
         self.password = secrets.token_urlsafe(24)
         self.secret = base64.b64encode(secrets.token_bytes(32)).decode()
         self.otp_secret = base64.b64encode(secrets.token_bytes(32)).decode()
+        self.outbox_secret = base64.b64encode(secrets.token_bytes(32)).decode()
         self.app = self.mail = None
         self.pg_started = False
         self.pgdir = Path("/tmp") / (self.db + "_pg")
@@ -148,14 +149,15 @@ class Runtime:
 
     def app_env(self):
         # Strip inherited Spring/DB/auth overrides: the declared baseline must be reproducible.
-        prefixes = ("SPRING_", "SERVER_", "DB_", "TEST_DB_", "JWT_", "EMAIL_", "SMTP_", "AUTH_",
+        prefixes = ("SPRING_", "SERVER_", "DB_", "TEST_DB_", "JWT_", "EMAIL_", "OTP_", "SMTP_", "AUTH_",
                     "BOOTSTRAP_", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS")
         env = {k: v for k, v in os.environ.items() if not k.startswith(prefixes)}
         env.update(SPRING_PROFILES_ACTIVE="dev", SERVER_PORT=str(self.app_port),
                    DB_URL=f"jdbc:postgresql://127.0.0.1:{self.pg_port}/{self.db}",
                    DB_USERNAME=self.role, DB_PASSWORD=self.password,
                    JWT_SECRET=self.secret, EMAIL_OTP_SECRET=self.otp_secret,
-                   SPRING_MAIL_HOST="127.0.0.1", SMTP_PORT="1025", BOOTSTRAP_SUPER_ADMIN_ENABLED="false")
+                   OTP_OUTBOX_SECRET=self.outbox_secret,
+                   SMTP_HOST="127.0.0.1", SMTP_PORT="1025", BOOTSTRAP_SUPER_ADMIN_ENABLED="false")
         return env
 
     def start_app(self):

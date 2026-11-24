@@ -30,7 +30,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/locations"):
             data = [{"id": 1}]
         else:
-            data = {"id": 1, "routeId": 1, "departureTime": "2030-01-01T00:00:00"}
+            data = {"id": 1, "routeId": 1, "departureTime": "2030-01-01T00:00:00",
+                    "status": "SCHEDULED", "availableSeats": 40}
             if self.path.split("?")[0] == "/api/trips":
                 data = [data]
         body = json.dumps(data).encode()
