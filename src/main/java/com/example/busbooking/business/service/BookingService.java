@@ -126,7 +126,7 @@ public class BookingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found with id: " + bookingId));
         verifyAccess(userId, admin, booking);
         if (booking.getStatus() == BookingStatus.CANCELLED) {
-            throw new BusinessException("Booking is already cancelled");
+            return booking;
         }
         Trip trip = tripRepository.findByIdForUpdate(booking.getTripId())
                 .orElseThrow(() -> new ResourceNotFoundException(

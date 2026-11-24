@@ -230,14 +230,13 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancel_whenAlreadyCancelled_shouldReject() {
+    void cancel_whenAlreadyCancelled_shouldReturnBookingWithoutRestoringSeats() {
         Booking booking = mock(Booking.class);
         when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
         when(booking.getUserId()).thenReturn(USER_ID);
         when(booking.getStatus()).thenReturn(BookingStatus.CANCELLED);
 
-        assertThrows(BusinessException.class,
-                () -> bookingService.cancel(USER_ID, false, BOOKING_ID));
+        assertSame(booking, bookingService.cancel(USER_ID, false, BOOKING_ID));
         verifyNoInteractions(tripRepository);
         verify(bookingRepository, never()).updateStatus(anyLong(), any(BookingStatus.class));
     }

@@ -161,7 +161,34 @@ class TripBookingIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
         assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
         mvc.perform(delete("/api/bookings/" + booking.id()).header("Authorization", "Bearer " + token))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("BUSINESS_ERROR"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(booking.id()))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mvc.perform(delete("/api/bookings/" + booking.id())
+                        .header("Authorization", "Bearer " + jwt.issue(otherUserId).value()))
+                .andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
+    }
+
+    @Test
+    void simultaneousCancellationRetriesRestoreSeatsOnlyOnce() throws Exception {
+        var booking = bookingService.create(userId, tripId, "Cancellation Retry", "0901234567", 2, null);
+        String token = jwt.issue(userId).value();
+        var ready = new CyclicBarrier(2);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Callable<Void> cancel = () -> {
+                ready.await(5, TimeUnit.SECONDS);
+                mvc.perform(delete("/api/bookings/" + booking.getId()).header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value("CANCELLED"));
+                return null;
+            };
+            var first = pool.submit(cancel);
+            var second = pool.submit(cancel);
+            first.get(20, TimeUnit.SECONDS);
+            second.get(20, TimeUnit.SECONDS);
+        }
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
     }
 
     @Test

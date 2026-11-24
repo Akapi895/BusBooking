@@ -60,6 +60,8 @@ public class BookingController {
     }
 
     @DeleteMapping("/bookings/{bookingId}")
+    @Operation(summary = "Cancel a booking",
+            description = "Repeated cancellation returns the cancelled booking without restoring seats again.")
     public BookingResponse cancel(@PathVariable Long bookingId, Authentication authentication) {
         Long userId = userId(authentication);
         return mapper.toResponse(bookingService.cancel(userId, isAdmin(authentication), bookingId));
