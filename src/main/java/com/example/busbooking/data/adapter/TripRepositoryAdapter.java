@@ -9,6 +9,7 @@ import com.example.busbooking.domain.exception.TripConflictException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -24,12 +25,15 @@ public class TripRepositoryAdapter implements TripRepository {
 
     private final SpringDataTripRepository springDataTripRepository;
     private final TripPersistenceMapper tripPersistenceMapper;
+    private final JdbcTemplate jdbc;
 
     public TripRepositoryAdapter(
             SpringDataTripRepository springDataTripRepository,
-            TripPersistenceMapper tripPersistenceMapper) {
+            TripPersistenceMapper tripPersistenceMapper,
+            JdbcTemplate jdbc) {
         this.springDataTripRepository = springDataTripRepository;
         this.tripPersistenceMapper = tripPersistenceMapper;
+        this.jdbc = jdbc;
     }
 
     @Override
@@ -88,6 +92,16 @@ public class TripRepositoryAdapter implements TripRepository {
     public Optional<Trip> findByIdForUpdate(Long tripId) {
         return springDataTripRepository.findByIdForUpdate(tripId)
                 .map(tripPersistenceMapper::toDomain);
+    }
+
+    @Override
+    public Optional<SeatReservation> reserveSeats(Long tripId, int quantity, LocalDateTime now) {
+        return jdbc.query("""
+                UPDATE trips SET available_seats = available_seats - ?
+                WHERE id = ? AND status = 'SCHEDULED' AND departure_time > ? AND available_seats >= ?
+                RETURNING price, departure_time
+                """, (row, index) -> new SeatReservation(row.getBigDecimal(1), row.getObject(2, LocalDateTime.class)),
+                quantity, tripId, now, quantity).stream().findFirst();
     }
 
     @Override

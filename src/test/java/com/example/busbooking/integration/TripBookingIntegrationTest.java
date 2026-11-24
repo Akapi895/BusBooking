@@ -226,6 +226,16 @@ class TripBookingIntegrationTest {
                 .isZero();
     }
 
+    @Test
+    void bookingInsertFailureRollsBackSeatReservation() {
+        assertThatThrownBy(() -> bookingService.create(
+                Long.MAX_VALUE, tripId, "Test Passenger", "0901234567", 1))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(4);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bookings WHERE trip_id = ?", Long.class, tripId)).isZero();
+    }
+
     private Long roleId(String name) {
         return jdbc.queryForObject("SELECT id FROM roles WHERE name = ?", Long.class, name);
     }

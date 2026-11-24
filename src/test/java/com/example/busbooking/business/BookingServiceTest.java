@@ -62,13 +62,8 @@ class BookingServiceTest {
 
     @Test
     void create_whenValid_shouldSaveConfirmedBookingAndDecreaseSeats() {
-        Trip trip = mock(Trip.class);
-        when(tripRepository.findReservationForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
-        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
-        when(trip.getDepartureTime()).thenReturn(future);
-        when(trip.getAvailableSeats()).thenReturn(5);
-        when(trip.getPrice()).thenReturn(new BigDecimal("150000"));
-        when(tripRepository.updateAvailableSeats(TRIP_ID, -2)).thenReturn(true);
+        when(tripRepository.reserveSeats(eq(TRIP_ID), eq(2), any())).thenReturn(
+                Optional.of(new TripRepository.SeatReservation(new BigDecimal("150000"), future)));
 
         Booking savedBooking = mock(Booking.class);
         when(bookingRepository.save(any(Booking.class))).thenReturn(savedBooking);
@@ -87,7 +82,7 @@ class BookingServiceTest {
         assertEquals(BookingStatus.CONFIRMED, newBooking.getStatus());
         assertNotNull(newBooking.getBookingCode());
         assertTrue(newBooking.getBookingCode().startsWith("BK-"));
-        verify(tripRepository).updateAvailableSeats(TRIP_ID, -2);
+        verify(tripRepository, never()).findReservationForUpdate(TRIP_ID);
     }
 
     @Test
@@ -135,15 +130,28 @@ class BookingServiceTest {
     }
 
     @Test
-    void create_whenSeatUpdateFails_shouldRejectWithoutSaving() {
+    void create_whenSeatsBecomeAvailableAfterFirstAttempt_shouldReserveWithRowLocked() {
         Trip trip = mock(Trip.class);
         when(tripRepository.findReservationForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
         when(trip.getDepartureTime()).thenReturn(future);
         when(trip.getAvailableSeats()).thenReturn(3);
-        when(tripRepository.updateAvailableSeats(TRIP_ID, -2)).thenReturn(false);
+        when(tripRepository.reserveSeats(eq(TRIP_ID), eq(2), any())).thenReturn(
+                Optional.empty(), Optional.of(new TripRepository.SeatReservation(new BigDecimal("150000"), future)));
+        Booking saved = mock(Booking.class);
+        when(bookingRepository.save(any())).thenReturn(saved);
 
-        assertThrows(InsufficientSeatsException.class,
+        assertSame(saved, bookingService.create(USER_ID, TRIP_ID, "A", "0901234567", 2));
+        verify(tripRepository, times(2)).reserveSeats(eq(TRIP_ID), eq(2), any());
+    }
+
+    @Test
+    void create_whenReservationCompletesAtDeparture_shouldRejectWithoutSaving() {
+        var departure = java.time.LocalDateTime.of(2026, 1, 1, 7, 0);
+        when(tripRepository.reserveSeats(eq(TRIP_ID), eq(2), any())).thenReturn(
+                Optional.of(new TripRepository.SeatReservation(new BigDecimal("150000"), departure)));
+
+        assertThrows(BusinessException.class,
                 () -> bookingService.create(USER_ID, TRIP_ID, "A", "0901234567", 2));
         verifyNoInteractions(bookingRepository);
     }

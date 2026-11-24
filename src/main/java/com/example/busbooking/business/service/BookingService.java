@@ -62,6 +62,23 @@ public class BookingService {
                         stored.getTotalAmount(), BookingStatus.CONFIRMED, stored.getBookedAt());
             }
         }
+        var reservation = tripRepository.reserveSeats(tripId, quantity, TravelTime.now(clock))
+                .orElseGet(() -> reserveAfterRechecking(tripId, quantity));
+        LocalDateTime now = TravelTime.now(clock);
+        // The UPDATE can wait for another transaction across the departure boundary.
+        if (!reservation.departureTime().isAfter(now)) {
+            throw new BusinessException("Trip is not available for booking");
+        }
+        BigDecimal total = reservation.price().multiply(BigDecimal.valueOf(quantity));
+        Booking booking = new Booking(null, "BK-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20), userId, tripId,
+                name, phone, quantity, reservation.price(), total, BookingStatus.CONFIRMED, now);
+        Booking saved = bookingRepository.save(booking);
+        if (key != null) idempotency.complete(userId, key, saved.getId());
+        return saved;
+    }
+
+    private TripRepository.SeatReservation reserveAfterRechecking(Long tripId, int quantity) {
+        // Diagnose the miss against the locked row. A cancellation or admin change may already have made it bookable.
         Trip trip = tripRepository.findReservationForUpdate(tripId)
                 .orElseThrow(() -> new ResourceNotFoundException("Trip not found with id: " + tripId));
         LocalDateTime now = TravelTime.now(clock);
@@ -71,15 +88,8 @@ public class BookingService {
         if (trip.getAvailableSeats() < quantity) {
             throw new InsufficientSeatsException("Not enough available seats");
         }
-        if (!tripRepository.updateAvailableSeats(tripId, -quantity)) {
-            throw new InsufficientSeatsException("Not enough available seats");
-        }
-        BigDecimal total = trip.getPrice().multiply(BigDecimal.valueOf(quantity));
-        Booking booking = new Booking(null, "BK-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20), userId, tripId,
-                name, phone, quantity, trip.getPrice(), total, BookingStatus.CONFIRMED, now);
-        Booking saved = bookingRepository.save(booking);
-        if (key != null) idempotency.complete(userId, key, saved.getId());
-        return saved;
+        return tripRepository.reserveSeats(tripId, quantity, now)
+                .orElseThrow(() -> new InsufficientSeatsException("Not enough available seats"));
     }
 
     @Transactional(readOnly = true)
