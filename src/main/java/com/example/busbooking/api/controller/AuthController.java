@@ -86,6 +86,15 @@ public class AuthController {
                 .body(new MessageResponse("If the account is eligible, a verification email has been requested"));
     }
 
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Revoke every access token issued to the current account")
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        auth.logout(principal.userId());
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+    }
+
     @GetMapping("/me")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Read the current authenticated account")

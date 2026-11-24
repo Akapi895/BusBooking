@@ -246,6 +246,7 @@ class AuthServiceIntegrationTest {
         CyclicBarrier bothChecked = new CyclicBarrier(2);
         UserRepository synchronizedUsers = new UserRepository() {
             public Optional<Principal> findActiveVerifiedPrincipal(Long id) { return users.findActiveVerifiedPrincipal(id); }
+            @Override public void revokeTokens(Long userId) { users.revokeTokens(userId); }
             public Optional<User> findById(Long id) { return users.findById(id); }
             public Optional<User> findByEmail(String email) { return users.findByEmail(email); }
             public User save(User user) { return users.save(user); }
@@ -280,7 +281,7 @@ class AuthServiceIntegrationTest {
     }
 
     private AuthService auth(UserRepository repository, EmailVerificationService verifier) {
-        return new AuthService(repository, roles, passwords, id -> {
+        return new AuthService(repository, roles, passwords, (id, version) -> {
             issued.incrementAndGet();
             return new IssuedToken("unit-test-only-token", 3600);
         }, verifier);

@@ -36,7 +36,7 @@ class JwtAuthenticationFilterTest {
 
     @BeforeEach
     void setupUser() {
-        when(repository.findActiveVerifiedPrincipal(42L)).thenReturn(Optional.of(new UserRepository.Principal(42L, "hoang@example.com", RoleName.USER)));
+        when(repository.findActiveVerifiedPrincipal(42L)).thenReturn(Optional.of(new UserRepository.Principal(42L, "hoang@example.com", RoleName.USER, 0)));
     }
 
     @Test

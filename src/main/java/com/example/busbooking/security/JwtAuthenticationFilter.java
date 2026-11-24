@@ -43,7 +43,7 @@ public final class JwtAuthenticationFilter extends OncePerRequestFilter {
                     var bearer = BEARER.matcher(header);
                     if (!bearer.matches()) { throw new JwtAuthenticationException(); }
                     var token = jwt.verify(bearer.group(1));
-                    var principal = users.loadById(token.userId());
+                    var principal = users.loadById(token.userId(), token.tokenVersion());
                     if (SecurityContextHolder.getContext().getAuthentication() == null) {
                         var authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null,
                                 List.of(new SimpleGrantedAuthority("ROLE_" + principal.role().name())));

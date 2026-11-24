@@ -40,6 +40,10 @@ public class UserEntity {
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     private Instant updatedAt;
 
+    // Changed only by the revocation update query.
+    @Column(name = "token_version", nullable = false, insertable = false, updatable = false)
+    private int tokenVersion;
+
     protected UserEntity() { }
 
     public UserEntity(Long id, String fullName, String email, String passwordHash, String phone, RoleEntity role, UserStatus status, boolean emailVerified) {
@@ -63,4 +67,5 @@ public class UserEntity {
     public boolean isEmailVerified() { return emailVerified; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public int getTokenVersion() { return tokenVersion; }
 }

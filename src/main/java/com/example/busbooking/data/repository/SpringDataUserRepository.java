@@ -12,12 +12,16 @@ import java.util.Optional;
 
 public interface SpringDataUserRepository extends JpaRepository<UserEntity, Long> {
     @Query("""
-        SELECT new com.example.busbooking.business.port.repository.UserRepository$Principal(u.id, u.email, r.name)
+        SELECT new com.example.busbooking.business.port.repository.UserRepository$Principal(u.id, u.email, r.name, u.tokenVersion)
           FROM UserEntity u JOIN u.role r
          WHERE u.id = :id AND u.status = com.example.busbooking.domain.enums.UserStatus.ACTIVE
            AND u.emailVerified = true
         """)
     Optional<com.example.busbooking.business.port.repository.UserRepository.Principal> findActiveVerifiedPrincipal(Long id);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update UserEntity u set u.tokenVersion = u.tokenVersion + 1 where u.id = :id")
+    int incrementTokenVersion(Long id);
 
     @Override
     @EntityGraph(attributePaths = "role")

@@ -71,6 +71,7 @@ public class SecurityConfig {
                     access.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
                             "/api/auth/verify-email", "/api/auth/resend-verification").permitAll();
                     access.requestMatchers(HttpMethod.GET, "/api/auth/me").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
+                    access.requestMatchers(HttpMethod.POST, "/api/auth/logout").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
                     access.requestMatchers(HttpMethod.GET, "/api/trips", "/api/trips/{id}").permitAll();
                     access.requestMatchers(HttpMethod.GET, "/api/locations").permitAll();
                     access.requestMatchers(HttpMethod.GET, "/api/users/me").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");

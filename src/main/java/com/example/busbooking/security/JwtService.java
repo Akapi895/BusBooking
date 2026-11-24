@@ -38,8 +38,11 @@ public final class JwtService implements TokenProvider {
                 .build();
     }
 
+    private static final String VERSION_CLAIM = "ver";
+
     @Override
-    public IssuedToken issue(Long userId) {
+    public IssuedToken issue(Long userId, int tokenVersion) {
+        if (tokenVersion < 0) { throw new IllegalArgumentException("Token version cannot be negative"); }
         if (userId == null || userId <= 0) {
             throw new IllegalArgumentException("A positive user ID is required");
         }
@@ -49,6 +52,7 @@ public final class JwtService implements TokenProvider {
                 .issuer(issuer)
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(issuedAt.plusSeconds(ttlSeconds)))
+                .claim(VERSION_CLAIM, tokenVersion)
                 .signWith(key, Jwts.SIG.HS256)
                 .compact();
         return new IssuedToken(token, ttlSeconds);
@@ -74,7 +78,10 @@ public final class JwtService implements TokenProvider {
             if (issued.isAfter(now) || !expiry.isAfter(issued) || !now.isBefore(expiry)) {
                 throw new JwtAuthenticationException();
             }
-            return new VerifiedToken(userId, issued, expiry);
+            // Tokens issued before versioning carry no claim and count as version 0.
+            Object version = claims.get(VERSION_CLAIM);
+            if (version != null && !(version instanceof Integer v && v >= 0)) { throw new JwtAuthenticationException(); }
+            return new VerifiedToken(userId, issued, expiry, version == null ? 0 : (Integer) version);
         } catch (JwtException | IllegalArgumentException invalid) {
             // Drop parser details: some library messages include raw claims or token fragments.
             throw new JwtAuthenticationException();
