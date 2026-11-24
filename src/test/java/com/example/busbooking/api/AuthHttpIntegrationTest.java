@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
-        "auth.rate-limit.register-limit=500", "auth.rate-limit.login-limit=500",
+        "auth.rate-limit.register-limit=500", "auth.rate-limit.login-limit=500", "auth.rate-limit.login-account-limit=500",
         "auth.rate-limit.verify-limit=500", "auth.rate-limit.resend-limit=500",
         "auth.cors.allowed-origins=https://client.example"})
 @ActiveProfiles("test")
