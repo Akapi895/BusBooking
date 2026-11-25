@@ -1,8 +1,21 @@
 // Demo UI for the BusBooking API. No build step: served as static files by Nginx.
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const money = (v) => Number(v).toLocaleString('vi-VN') + ' đ';
-const time = (v) => (v ? v.replace('T', ' ').slice(0, 16) : '');
+const money = (v) => Number(v).toLocaleString('vi-VN') + ' ₫';
+const time = (v) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)} ${v.slice(11, 16)}` : '');
+const clock = (v) => (v ? v.slice(11, 16) : '--:--');
+const day = (v) => (v ? new Date(v).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }) : '');
+const dayDiff = (a, b) => Math.round((new Date(b.slice(0, 10)) - new Date(a.slice(0, 10))) / 864e5);
+function duration(t) {
+  const mins = t.arrivalTime ? (new Date(t.arrivalTime) - new Date(t.departureTime)) / 6e4 : t.route?.estimatedDurationMinutes;
+  return mins > 0 ? `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}` : '';
+}
+
+const STATUS = {
+  SCHEDULED: ['Sắp khởi hành', 'ok'], IN_PROGRESS: ['Đang chạy', 'info'], COMPLETED: ['Đã hoàn thành', ''],
+  CANCELLED: ['Đã huỷ', 'err'], CONFIRMED: ['Đã xác nhận', 'ok'], REFUND_PENDING: ['Chờ hoàn tiền', 'warn'], REFUNDED: ['Đã hoàn tiền', ''],
+};
+const chip = (s) => `<span class="chip ${STATUS[s]?.[1] ?? ''}">${esc(STATUS[s]?.[0] ?? s)}</span>`;
 
 // Demo only: token in sessionStorage is readable by any script on the page.
 let token = sessionStorage.getItem('token');
@@ -90,6 +103,36 @@ async function loadLocations() {
   document.querySelectorAll('#search-form select').forEach((s) => s.insertAdjacentHTML('beforeend', opts));
 }
 
+let tripsById = new Map();
+
+function tripCard(t) {
+  const seats = t.availableSeats ?? 0;
+  const cap = t.vehicle?.seatCapacity;
+  const bookable = t.status === 'SCHEDULED' && seats > 0;
+  const next = t.arrivalTime ? dayDiff(t.departureTime, t.arrivalTime) : 0;
+  return `
+    <li class="trip">
+      <div class="journey">
+        <div class="stop"><b class="clock">${clock(t.departureTime)}</b><span>${esc(t.origin)}</span></div>
+        <div class="leg"><span>${duration(t)}</span></div>
+        <div class="stop end"><b class="clock">${clock(t.arrivalTime)}${next > 0 ? `<sup>+${next}</sup>` : ''}</b><span>${esc(t.destination)}</span></div>
+      </div>
+      <div class="info">
+        <span class="when">${esc(day(t.departureTime))}<small>Chuyến #${t.id}</small></span>
+        <span class="op">${esc(t.operatorName)}${t.vehicleType ? ' · ' + esc(t.vehicleType) : ''}</span>
+        <span class="seats ${seats === 0 ? 'none' : seats <= 5 ? 'low' : ''}">
+          ${cap ? `<span class="bar"><i style="--fill:${Math.min(100, (seats / cap) * 100)}%"></i></span>` : ''}
+          ${seats === 0 ? 'Hết chỗ' : `Còn ${seats}${cap ? '/' + cap : ''} chỗ`}
+        </span>
+      </div>
+      <div class="buy">
+        <span class="price">${money(t.price)} <small>/ ghế</small></span>
+        ${t.status === 'SCHEDULED' ? '' : chip(t.status)}
+        <button class="primary" data-book="${t.id}" ${bookable ? '' : 'disabled'}>Chọn chuyến</button>
+      </div>
+    </li>`;
+}
+
 async function loadTrips(page = tripPage) {
   const request = ++tripRequest;
   const params = new URLSearchParams(Object.entries(formData($('#search-form'))).filter(([, v]) => v));
@@ -100,17 +143,9 @@ async function loadTrips(page = tripPage) {
     if (request !== tripRequest) return;
     tripPage = page;
     updatePage('trip', tripPage, trips.length);
-    $('#trips').innerHTML = trips.map((t) => `
-      <tr>
-        <td>${t.id}</td>
-        <td>${esc(t.origin)} → ${esc(t.destination)}</td>
-        <td>${esc(t.operatorName)}</td>
-        <td>${time(t.departureTime)}</td>
-        <td>${money(t.price)}</td>
-        <td>${t.availableSeats}</td>
-        <td><span class="badge ${esc(t.status)}">${esc(t.status)}</span></td>
-        <td><button data-book="${t.id}" ${t.status !== 'SCHEDULED' || !t.availableSeats ? 'disabled' : ''}>Đặt</button></td>
-      </tr>`).join('') || '<tr><td colspan="8">Không có chuyến nào</td></tr>';
+    tripsById = new Map(trips.map((t) => [String(t.id), t]));
+    $('#trips').innerHTML = trips.map(tripCard).join('')
+      || '<li class="empty">Không có chuyến nào khớp. Thử bỏ bớt điều kiện hoặc chọn ngày khác.</li>';
   } catch (err) { if (request === tripRequest) toast(err.message, true); }
 }
 onSubmit($('#search-form'), () => loadTrips(0));
@@ -126,11 +161,23 @@ $('#trips').addEventListener('click', (e) => {
   const id = e.target.dataset.book;
   if (!id) return;
   if (!token) { toast('Đăng nhập để đặt vé', true); return show('auth'); }
+  const t = tripsById.get(id);
   const form = $('#book-form');
   form.tripId.value = id;
+  form.quantity.max = t?.availableSeats || '';
   $('#book-trip').textContent = id;
+  $('#book-route').textContent = t ? `${t.origin} → ${t.destination}` : '';
+  $('#book-when').textContent = t ? `${day(t.departureTime)} · ${clock(t.departureTime)} · ${t.operatorName}` : '';
+  updateTotal();
   $('#book-dialog').showModal();
 });
+
+function updateTotal() {
+  const form = $('#book-form');
+  const t = tripsById.get(form.tripId.value);
+  $('#book-total').textContent = t ? money(t.price * (+form.quantity.value || 0)) : '';
+}
+$('#book-form').quantity.addEventListener('input', updateTotal);
 
 $('#book-form').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'ok') return; // "Huỷ" just closes the dialog
@@ -163,15 +210,15 @@ async function loadBookings(page = bookingPage) {
     updatePage('booking', bookingPage, list.length);
     $('#bookings').innerHTML = list.map((b) => `
       <tr>
-        <td>${esc(b.bookingCode)}</td>
-        <td>${b.tripId}</td>
+        <td class="code">${esc(b.bookingCode)}</td>
+        <td>#${b.tripId}</td>
         <td>${esc(b.passengerName)}</td>
-        <td>${b.quantity}</td>
-        <td>${money(b.totalAmount)}</td>
-        <td><span class="badge ${esc(b.status)}">${esc(b.status)}</span></td>
+        <td class="num">${b.quantity}</td>
+        <td class="num">${money(b.totalAmount)}</td>
+        <td>${chip(b.status)}</td>
         <td>${time(b.bookedAt)}</td>
-        <td>${b.status === 'CONFIRMED' ? `<button data-cancel="${b.id}">Huỷ vé</button>` : ''}</td>
-      </tr>`).join('') || '<tr><td colspan="8">Chưa có vé nào</td></tr>';
+        <td>${b.status === 'CONFIRMED' ? `<button class="ghost danger" data-cancel="${b.id}">Huỷ vé</button>` : ''}</td>
+      </tr>`).join('') || '<tr><td colspan="8" class="empty-cell">Bạn chưa đặt vé nào. Vào Tìm chuyến để chọn chuyến đầu tiên.</td></tr>';
   } catch (err) { if (request === bookingRequest && token) toast(err.message, true); }
 }
 $('#booking-prev').addEventListener('click', () => loadBookings(bookingPage - 1));

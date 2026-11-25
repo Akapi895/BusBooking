@@ -3,67 +3,92 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BusBooking Demo</title>
+  <title>BusBooking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <strong>BusBooking Demo</strong>
-  <nav>
-    <button data-view="search">Tìm chuyến</button>
-    <button data-view="bookings" class="auth-only">Vé của tôi</button>
-    <button data-view="stress" class="auth-only">Thử tải đồng thời</button>
-    <button data-view="auth" class="guest-only">Đăng nhập</button>
-  </nav>
-  <span id="who"></span>
-  <button id="logout" class="auth-only">Đăng xuất</button>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <span class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M3 10h18M7 17v3M17 17v3M7 13.5h.01M17 13.5h.01"/></svg>
+      BusBooking
+    </span>
+    <nav>
+      <button data-view="search">Tìm chuyến</button>
+      <button data-view="bookings" class="auth-only">Vé của tôi</button>
+      <button data-view="stress" class="auth-only">Thử tải đồng thời</button>
+      <button data-view="auth" class="guest-only">Đăng nhập</button>
+    </nav>
+    <div class="account">
+      <span id="who"></span>
+      <button id="logout" class="auth-only ghost">Đăng xuất</button>
+    </div>
+  </div>
 </header>
 
-<div id="toast" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
 
 <main>
   <!-- Search -->
   <section id="view-search">
-    <h2>Tìm chuyến</h2>
-    <form id="search-form" class="row">
-      <label>Điểm đi <select name="originId"><option value="">Tất cả</option></select></label>
-      <label>Điểm đến <select name="destinationId"><option value="">Tất cả</option></select></label>
-      <label>Ngày đi <input type="date" name="departureDate"></label>
-      <button>Tìm</button>
-    </form>
-    <table>
-      <thead><tr><th>#</th><th>Tuyến</th><th>Nhà xe</th><th>Khởi hành</th><th>Giá</th><th>Còn</th><th>Trạng thái</th><th></th></tr></thead>
-      <tbody id="trips"></tbody>
-    </table>
-    <div class="row">
-      <button id="trip-prev" disabled>Trang trước</button>
-      <span id="trip-page" aria-live="polite">Trang 1</span>
-      <button id="trip-next" disabled>Trang sau</button>
+    <div class="search-band">
+      <div class="wrap">
+        <h1>Tìm chuyến xe</h1>
+        <p class="lede">Chọn điểm đi, điểm đến và ngày khởi hành. Để trống để xem tất cả chuyến.</p>
+        <form id="search-form" class="search">
+          <label>Điểm đi <select id="origin" name="originId"><option value="">Tất cả</option></select></label>
+          <label>Điểm đến <select id="destination" name="destinationId"><option value="">Tất cả</option></select></label>
+          <label>Ngày đi <input id="departure-date" type="date" name="departureDate"></label>
+          <button class="primary">Tìm chuyến</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="wrap page">
+      <h2>Các chuyến khởi hành</h2>
+      <ol id="trips" class="trips"></ol>
+      <div class="pager">
+        <button id="trip-prev" disabled>Trang trước</button>
+        <span id="trip-page" aria-live="polite">Trang 1</span>
+        <button id="trip-next" disabled>Trang sau</button>
+      </div>
     </div>
 
     <dialog id="book-dialog">
       <form id="book-form" method="dialog">
-        <h3>Đặt vé chuyến #<span id="book-trip"></span></h3>
-        <input type="hidden" name="tripId">
-        <label>Tên hành khách <input name="passengerName" maxlength="100" required></label>
-        <label>SĐT <input name="passengerPhone" type="tel" maxlength="20" required></label>
-        <label>Số ghế <input type="number" name="quantity" min="1" value="1" required></label>
-        <div class="row">
-          <button value="cancel" formnovalidate>Huỷ</button>
-          <button value="ok">Đặt vé</button>
+        <div class="dialog-head">
+          <p class="eyebrow">Đặt vé · Chuyến #<span id="book-trip"></span></p>
+          <h3 id="book-route"></h3>
+          <p id="book-when"></p>
+        </div>
+        <div class="dialog-body">
+          <input type="hidden" name="tripId">
+          <label>Tên hành khách <input id="passenger-name" name="passengerName" maxlength="100" autocomplete="name" required></label>
+          <label>Số điện thoại <input id="passenger-phone" name="passengerPhone" type="tel" maxlength="20" autocomplete="tel" required></label>
+          <label>Số ghế <input id="quantity" type="number" name="quantity" min="1" value="1" required></label>
+          <div class="total"><span>Tạm tính</span><output id="book-total"></output></div>
+        </div>
+        <div class="actions">
+          <button value="cancel" class="ghost" formnovalidate>Huỷ</button>
+          <button value="ok" class="primary">Xác nhận đặt vé</button>
         </div>
       </form>
     </dialog>
   </section>
 
   <!-- My bookings -->
-  <section id="view-bookings" hidden>
-    <h2>Vé của tôi</h2>
-    <table>
-      <thead><tr><th>Mã</th><th>Chuyến</th><th>Hành khách</th><th>Số ghế</th><th>Tổng</th><th>Trạng thái</th><th>Đặt lúc</th><th></th></tr></thead>
-      <tbody id="bookings"></tbody>
-    </table>
-    <div class="row">
+  <section id="view-bookings" class="wrap page" hidden>
+    <h1>Vé của tôi</h1>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Mã vé</th><th>Chuyến</th><th>Hành khách</th><th class="num">Số ghế</th><th class="num">Tổng tiền</th><th>Trạng thái</th><th>Đặt lúc</th><th></th></tr></thead>
+        <tbody id="bookings"></tbody>
+      </table>
+    </div>
+    <div class="pager">
       <button id="booking-prev" disabled>Trang trước</button>
       <span id="booking-page" aria-live="polite">Trang 1</span>
       <button id="booking-next" disabled>Trang sau</button>
@@ -71,40 +96,41 @@
   </section>
 
   <!-- Concurrency demo -->
-  <section id="view-stress" hidden>
-    <h2>Thử tải đồng thời</h2>
-    <p>Bắn N yêu cầu đặt vé <b>cùng lúc</b> vào một chuyến (mỗi yêu cầu 1 ghế). Hệ thống đúng thì số vé thành công không bao giờ vượt số ghế còn trống.</p>
-    <form id="stress-form" class="row">
-      <label>Mã chuyến <input type="number" name="tripId" required></label>
-      <label>Số yêu cầu N <input type="number" name="n" min="1" max="500" value="50" required></label>
-      <button>Chạy</button>
+  <section id="view-stress" class="wrap page" hidden>
+    <h1>Thử tải đồng thời</h1>
+    <p class="intro">Gửi N yêu cầu đặt vé <b>cùng lúc</b> vào một chuyến, mỗi yêu cầu 1 ghế. Nếu hệ thống đúng, số vé đặt thành công không bao giờ vượt quá số ghế còn trống.</p>
+    <form id="stress-form" class="panel inline-form">
+      <label>Mã chuyến <input id="stress-trip" type="number" name="tripId" required></label>
+      <label>Số yêu cầu N <input id="stress-n" type="number" name="n" min="1" max="500" value="50" required></label>
+      <button class="primary">Chạy thử</button>
     </form>
-    <pre id="stress-out"></pre>
+    <pre id="stress-out" class="console"></pre>
   </section>
 
   <!-- Auth -->
-  <section id="view-auth" hidden>
+  <section id="view-auth" class="wrap page" hidden>
+    <h1>Tài khoản</h1>
     <div class="cards">
       <form id="login-form" class="card">
-        <h3>Đăng nhập</h3>
-        <label>Email <input type="email" name="email" required></label>
-        <label>Mật khẩu <input type="password" name="password" required></label>
-        <button>Đăng nhập</button>
+        <h2>Đăng nhập</h2>
+        <label>Email <input id="login-email" type="email" name="email" autocomplete="email" required></label>
+        <label>Mật khẩu <input id="login-password" type="password" name="password" autocomplete="current-password" required></label>
+        <button class="primary">Đăng nhập</button>
       </form>
       <form id="register-form" class="card">
-        <h3>Đăng ký</h3>
-        <label>Họ tên <input name="fullName" required></label>
-        <label>Email <input type="email" name="email" required></label>
-        <label>Mật khẩu <input type="password" name="password" required></label>
-        <label>SĐT <input name="phone" required></label>
-        <button>Đăng ký</button>
+        <h2>Tạo tài khoản</h2>
+        <label>Họ tên <input id="reg-name" name="fullName" autocomplete="name" required></label>
+        <label>Email <input id="reg-email" type="email" name="email" autocomplete="email" required></label>
+        <label>Mật khẩu <input id="reg-password" type="password" name="password" autocomplete="new-password" required></label>
+        <label>Số điện thoại <input id="reg-phone" name="phone" type="tel" autocomplete="tel" required></label>
+        <button class="primary">Đăng ký</button>
       </form>
       <form id="verify-form" class="card">
-        <h3>Xác minh email</h3>
-        <p class="hint">Lấy mã 6 số trong Mailpit: <a href="http://localhost:8026" target="_blank">localhost:8026</a></p>
-        <label>Email <input type="email" name="email" required></label>
-        <label>Mã OTP <input name="code" pattern="[0-9]{6}" required></label>
-        <button>Xác minh</button>
+        <h2>Xác minh email</h2>
+        <p class="hint">Sau khi đăng ký, lấy mã 6 số trong Mailpit tại <a href="http://localhost:8026" target="_blank" rel="noopener">localhost:8026</a>.</p>
+        <label>Email <input id="verify-email" type="email" name="email" autocomplete="email" required></label>
+        <label>Mã OTP <input id="verify-code" name="code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required></label>
+        <button class="primary">Xác minh</button>
       </form>
     </div>
   </section>
