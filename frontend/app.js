@@ -108,7 +108,7 @@ async function loadTrips(page = tripPage) {
         <td>${time(t.departureTime)}</td>
         <td>${money(t.price)}</td>
         <td>${t.availableSeats}</td>
-        <td>${esc(t.status)}</td>
+        <td><span class="badge ${esc(t.status)}">${esc(t.status)}</span></td>
         <td><button data-book="${t.id}" ${t.status !== 'SCHEDULED' || !t.availableSeats ? 'disabled' : ''}>Đặt</button></td>
       </tr>`).join('') || '<tr><td colspan="8">Không có chuyến nào</td></tr>';
   } catch (err) { if (request === tripRequest) toast(err.message, true); }
@@ -168,7 +168,7 @@ async function loadBookings(page = bookingPage) {
         <td>${esc(b.passengerName)}</td>
         <td>${b.quantity}</td>
         <td>${money(b.totalAmount)}</td>
-        <td>${esc(b.status)}</td>
+        <td><span class="badge ${esc(b.status)}">${esc(b.status)}</span></td>
         <td>${time(b.bookedAt)}</td>
         <td>${b.status === 'CONFIRMED' ? `<button data-cancel="${b.id}">Huỷ vé</button>` : ''}</td>
       </tr>`).join('') || '<tr><td colspan="8">Chưa có vé nào</td></tr>';
