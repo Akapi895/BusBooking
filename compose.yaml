@@ -31,6 +31,8 @@ services:
 
     ports:
       - "8086:8085"
+      # Actuator (health, metrics incl. hikaricp.*) published to the host's loopback only.
+      - "127.0.0.1:8087:8081"
 
     environment:
       SPRING_PROFILES_ACTIVE: dev
@@ -53,6 +55,7 @@ services:
 
       JAVA_TOOL_OPTIONS: "-Duser.timezone=Asia/Ho_Chi_Minh"
       SERVER_FORWARD_HEADERS_STRATEGY: native
+      MANAGEMENT_ADDRESS: 0.0.0.0
       SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES: "172[.]31[.]241[.]2"
 
     networks:
