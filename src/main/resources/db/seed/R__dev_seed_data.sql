@@ -13,6 +13,15 @@
 CREATE FUNCTION pg_temp.h(key text, n integer) RETURNS integer
     LANGUAGE sql IMMUTABLE AS $$ SELECT (abs(hashtext(key)::bigint) % n)::integer $$;
 
+-- The app stores every timestamp column in UTC (hibernate.jdbc.time_zone=UTC, Clock.systemUTC()).
+-- Timetables are planned in Vietnam time and converted on write; "now" is compared in UTC too.
+CREATE FUNCTION pg_temp.utc(vn_local timestamp) RETURNS timestamp
+    LANGUAGE sql IMMUTABLE AS $$ SELECT (vn_local AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'UTC' $$;
+CREATE FUNCTION pg_temp.utc_now() RETURNS timestamp
+    LANGUAGE sql STABLE AS $$ SELECT now() AT TIME ZONE 'UTC' $$;
+CREATE FUNCTION pg_temp.vn_today() RETURNS date
+    LANGUAGE sql STABLE AS $$ SELECT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date $$;
+
 -- ---------- Locations (one main coach station per city) ----------
 CREATE TEMP TABLE seed_locations (name, province, address, plate_code) ON COMMIT DROP AS VALUES
     ('Hà Nội', 'Hà Nội', 'Bến xe Mỹ Đình, 20 Phạm Hùng, Nam Từ Liêm', '29'),
@@ -118,9 +127,9 @@ WITH day_plan AS (
     CROSS JOIN generate_series(-14, 60) AS g(day_offset)
 ), slots AS (
     SELECT p.*, s.slot,
-           (CURRENT_DATE + p.day_offset) + interval '5 hours'
+           pg_temp.utc((pg_temp.vn_today() + p.day_offset) + interval '5 hours'
                + make_interval(mins => s.slot * (1110 / p.departures / 15 * 15)
-                   + 15 * pg_temp.h('j:' || p.dir_no || ':' || p.day_offset || ':' || s.slot, 5)) AS departure_time
+                   + 15 * pg_temp.h('j:' || p.dir_no || ':' || p.day_offset || ':' || s.slot, 5))) AS departure_time
     FROM day_plan p
     CROSS JOIN LATERAL generate_series(0, p.departures - 1) AS s(slot)
 )
@@ -145,8 +154,8 @@ SELECT t.route_id, t.vehicle_id, t.departure_time, t.arrival_time, t.price,
             ELSE greatest(least(t.capacity, 6), t.capacity - pg_temp.h('q:' || t.dir_no || ':' || t.day_offset || ':' || t.slot, t.capacity))
        END,
        CASE WHEN t.cancelled THEN 'CANCELLED'
-            WHEN t.arrival_time <= LOCALTIMESTAMP THEN 'COMPLETED'
-            WHEN t.departure_time <= LOCALTIMESTAMP THEN 'IN_PROGRESS'
+            WHEN t.arrival_time <= pg_temp.utc_now() THEN 'COMPLETED'
+            WHEN t.departure_time <= pg_temp.utc_now() THEN 'IN_PROGRESS'
             ELSE 'SCHEDULED'
        END
 FROM seed_trips t
@@ -193,7 +202,7 @@ JOIN trips t ON t.status <> 'IN_PROGRESS'
 JOIN vehicles v ON v.id = t.vehicle_id
 JOIN seed_vehicles sv ON sv.plate = v.license_plate
 WHERE (u.email = 'demo@busbooking.local'
-        AND t.departure_time < CURRENT_DATE + 30
+        AND t.departure_time < pg_temp.utc(pg_temp.vn_today() + 30)
         AND pg_temp.h('pick:' || u.email || ':' || t.id, 140) = 0)
    OR (u.email LIKE 'khach___@busbooking.local'
         AND pg_temp.h('pick:' || u.email || ':' || t.id, 900) = 0);
@@ -210,7 +219,7 @@ SELECT 'BK' || upper(substr(md5(b.k), 1, 8)),
             WHEN pg_temp.h('cx:' || b.k, 100) < 12 THEN 'CANCELLED'
             ELSE 'CONFIRMED'
        END,
-       least(LOCALTIMESTAMP - make_interval(mins => 5 + pg_temp.h('bt:' || b.k, 600)),
+       least(pg_temp.utc_now() - make_interval(mins => 5 + pg_temp.h('bt:' || b.k, 600)),
              b.departure_time - make_interval(days => 1 + pg_temp.h('bd:' || b.k, 10))),
        CASE WHEN b.trip_status = 'CANCELLED' AND pg_temp.h('rf:' || b.k, 2) = 1 THEN now() - interval '1 day' END
 FROM seed_bookings b
