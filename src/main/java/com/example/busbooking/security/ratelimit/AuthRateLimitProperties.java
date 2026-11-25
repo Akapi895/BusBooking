@@ -43,6 +43,8 @@ public class AuthRateLimitProperties {
             case "/api/auth/register" -> registerLimit;
             case "/api/auth/login" -> loginLimit;
             case LOGIN_ACCOUNT -> loginAccountLimit;
+            case "/api/auth/forgot-password" -> resendLimit;
+            case "/api/auth/reset-password" -> verifyLimit;
             case "/api/auth/verify-email" -> verifyLimit;
             case "/api/auth/resend-verification" -> resendLimit;
             default -> 0;

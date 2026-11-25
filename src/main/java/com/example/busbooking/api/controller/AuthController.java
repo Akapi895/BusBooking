@@ -6,6 +6,7 @@ import com.example.busbooking.api.mapper.AuthDtoMapper;
 import com.example.busbooking.business.service.AuthInputPolicy;
 import com.example.busbooking.business.service.AuthService;
 import com.example.busbooking.business.service.EmailVerificationService;
+import com.example.busbooking.business.service.PasswordResetService;
 import com.example.busbooking.security.AuthenticatedPrincipal;
 import com.example.busbooking.security.ratelimit.AuthRateLimitProperties;
 import com.example.busbooking.security.ratelimit.AuthRateLimiter;
@@ -40,13 +41,15 @@ public class AuthController {
     private final EmailVerificationService verification;
     private final AuthDtoMapper mapper;
     private final AuthRateLimiter limiter;
+    private final PasswordResetService passwordReset;
 
     public AuthController(AuthService auth, EmailVerificationService verification, AuthDtoMapper mapper,
-                          AuthRateLimiter limiter) {
+                          AuthRateLimiter limiter, PasswordResetService passwordReset) {
         this.auth = auth;
         this.verification = verification;
         this.mapper = mapper;
         this.limiter = limiter;
+        this.passwordReset = passwordReset;
     }
 
     @PostMapping("/register")
@@ -84,6 +87,24 @@ public class AuthController {
         verification.resend(request.email());
         return ResponseEntity.accepted().cacheControl(CacheControl.noStore())
                 .body(new MessageResponse("If the account is eligible, a verification email has been requested"));
+    }
+
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @ApiResponse(responseCode = "503", description = "SMTP unavailable", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @Operation(summary = "Email a password-reset code if the account is eligible")
+    public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody ResendVerificationRequest request) {
+        passwordReset.request(request.email());
+        return ResponseEntity.accepted().cacheControl(CacheControl.noStore())
+                .body(new MessageResponse("If the account is eligible, a password reset email has been sent"));
+    }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Set a new password with the emailed code; every existing access token is revoked")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordReset.reset(request.email(), request.code(), request.newPassword());
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
     @PostMapping("/logout")

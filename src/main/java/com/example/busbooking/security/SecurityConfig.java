@@ -69,7 +69,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(access -> {
                     access.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
                     access.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
-                            "/api/auth/verify-email", "/api/auth/resend-verification").permitAll();
+                            "/api/auth/verify-email", "/api/auth/resend-verification",
+                            "/api/auth/forgot-password", "/api/auth/reset-password").permitAll();
                     access.requestMatchers(HttpMethod.GET, "/api/auth/me").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
                     access.requestMatchers(HttpMethod.POST, "/api/auth/logout").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
                     access.requestMatchers(HttpMethod.GET, "/api/trips", "/api/trips/{id}").permitAll();
