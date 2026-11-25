@@ -14,6 +14,71 @@ Kiểm tra ngày 24/11/2026 trên Java 21, PostgreSQL 16 và Mailpit. PostgreSQL
 
 Chạy lại test Java bằng `mvn -B verify` với PostgreSQL kiểm thử. Xem cách chạy smoke và acceptance trong [hướng dẫn kiểm thử tải](../load-tests/ACCEPTANCE.md).
 
+## Tóm tắt cải tiến theo ISO/IEC 25010
+
+Tóm tắt các cải tiến theo đặc tính chất lượng ISO/IEC 25010. Số đo hiệu năng so bản `dev` cũ (`919bcef`) với Phase 2 (`e43c7c5`) và lấy từ các mục bên dưới. Mô tả tính năng ứng với nhánh `dev` hiện tại, gồm cả thay đổi sau Phase 2. Trạng thái đạt/chưa đạt theo từng chuẩn nằm ở [đối chiếu tiêu chuẩn](09-standards-compliance.md).
+
+### Hiệu năng
+
+| Chỉ số | Trước | Sau |
+|---|---:|---:|
+| Tìm chuyến có lọc, p95 | 250 ms | 16 ms |
+| Tìm chuyến có lọc, phản hồi thành công/giây | 225 | 695 |
+| Danh sách không lọc | 50.000 chuyến, 23 MB, 1,8 s | 20 chuyến, 9 KB, 16 ms (phân trang) |
+| Tranh ghế 160 client, p95 của phản hồi thành công | 578 ms | 359 ms |
+| Đếm ghế xác nhận theo chuyến (truy vấn DB) | 5,98 ms | 0,22 ms (index V22) |
+
+Cách làm: index cho tìm chuyến và vòng đời chuyến (V20, V22); trừ ghế và đọc giá trong một câu `UPDATE … RETURNING`; phân trang mặc định 20 chuyến; giới hạn số yêu cầu đặt vé xử lý cùng lúc cho mỗi chuyến.
+
+Khi tranh ghế, Phase 2 từ chối sớm bằng `503` thay vì xếp hàng chờ khóa. Ở 160 client, lần gửi đầu chỉ đặt được 25–28 vé và các yêu cầu còn lại nhận `503`. Vì vậy p95 tính trên mọi phản hồi giảm từ 1.531 xuống 297 ms, nhưng con số công bằng hơn là p95 của riêng phản hồi thành công ở bảng trên. Client thử lại theo `Retry-After` vẫn lấp đủ ghế (mục [khi client thử lại](#khi-client-thử-lại-sau-503)).
+
+Đặt vé rải đều có trung vị tốt hơn (p95 234 → 203 ms, 223 → 331 booking/giây), nhưng khoảng dao động giữa hai bản chồng lên nhau. Giới hạn tổng số booking xử lý cùng lúc trên mỗi instance (`07e13ff`) có sau lần đo này.
+
+### Độ tin cậy và tính đúng
+
+- Gửi lại cùng `Idempotency-Key` không tạo booking trùng và chỉ trừ ghế một lần. Cùng key với nội dung khác bị từ chối.
+- Không bán quá số ghế. Ràng buộc DB chặn một xe bị xếp hai chuyến trùng giờ (V18). Không đặt được chuyến đã khởi hành. Chuyến tự chuyển `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`.
+- Hủy vé lặp lại chỉ hoàn ghế một lần. Khách hủy được tới trước giờ khởi hành 30 phút, admin hủy được tới lúc xe chạy.
+- Khi admin hủy chuyến, các vé đã xác nhận chuyển sang `REFUND_PENDING` và khách nhận email thông báo. Admin hoàn tiền bên ngoài hệ thống rồi đánh dấu vé `REFUNDED` (V25).
+- SMTP lỗi không làm đăng ký thất bại: email được gửi lại qua outbox, và mã OTP đã gửi trước đó vẫn dùng được khi lần gửi mới lỗi.
+- Quá tải trả `503` kèm `Retry-After` thay vì treo kết nối.
+- Mọi lượt benchmark tranh ghế đều đối soát đúng số vé, số ghế còn lại và tổng tiền.
+
+### Bảo mật
+
+- Rate limit cho API auth dùng chung toàn cụm qua Redis và chỉ tin địa chỉ IP do Nginx chuyển tiếp. Khi Redis dừng, API auth trả `503` kèm `Retry-After`, còn API đọc danh mục công khai vẫn trả `200`.
+- Giới hạn đăng nhập theo tài khoản để chặn đoán mật khẩu từ nhiều IP.
+- Logout, đổi mật khẩu và đặt lại mật khẩu thu hồi mọi JWT cũ (`token_version`, V23).
+- Đổi mật khẩu, quên mật khẩu bằng mã gửi qua email (V24); chặn mật khẩu phổ biến.
+- Log `security.audit` cho đổi quyền và các sự kiện auth (đăng nhập, logout, đổi và đặt lại mật khẩu).
+- Actuator chỉ mở trên cổng quản trị loopback.
+
+### Khả năng mở rộng
+
+Backend không giữ trạng thái nên chạy được nhiều instance sau Nginx. Rate limit (Redis) và các outbox (`SKIP LOCKED`) vẫn đúng khi nhiều instance cùng chạy.
+
+Giới hạn còn lại: đặt vé cho một chuyến đông khách bị nghẽn ở khóa dòng của chuyến đó trong PostgreSQL. Ở [lượt chạy thử với một và hai backend](#lượt-chạy-thử-với-một-và-hai-backend), hai backend nhận gấp đôi số vé (16 so với 8) vì giới hạn xử lý cùng lúc tính riêng cho từng instance, nhưng p95 tăng từ 1.007 lên 1.255 ms do gấp đôi số yêu cầu cùng chờ một khóa. Mỗi cấu hình mới có một mẫu đo.
+
+### Khả năng bảo trì và vận hành
+
+- CI ([`ci.yml`](../.github/workflows/ci.yml)) chạy test với PostgreSQL 16 và Redis 7. Số phương thức test tăng từ 282 lên 317, không gồm 3 smoke test `*IT` chạy riêng.
+- Có test nâng cấp Flyway từ V16 (`FlywayUpgradeIntegrationTest`) và bước quét constant pool kiểm tra code nghiệp vụ không phụ thuộc thẳng vào hạ tầng.
+- Có bộ load test Locust và kịch bản chạy trên Kaggle ([`load-tests/`](../load-tests/)).
+- Actuator cung cấp health và metric pool kết nối (`hikaricp.*`).
+
+### Giao diện người dùng
+
+- Danh sách chuyến hiển thị dạng vé: nhà xe, mốc giờ đi, thời gian đi, giờ đến và cuống vé ghi giá. Chuyến được nhóm theo ngày khởi hành.
+- Luồng tài khoản: đăng ký → kích hoạt bằng mã OTP (có gửi lại mã), quên và đặt lại mật khẩu. Lỗi hiện ngay trong form.
+- Khách chưa đăng nhập chọn chuyến thì được đưa sang đăng nhập, sau đó quay lại đặt đúng chuyến đó. Thông tin hành khách điền sẵn từ tài khoản. Đặt xong hiện mã vé.
+- Profile `dev` nạp dữ liệu mẫu qua Flyway ([`R__dev_seed_data.sql`](../src/main/resources/db/seed/R__dev_seed_data.sql)): khoảng 13.600 chuyến, 152 tài khoản và 2.300 vé.
+
+### Chưa làm
+
+Prometheus và Grafana (mới có Actuator), giữ ghế tạm `HELD` → `CONFIRMED`, và đo tải kéo dài với 3 instance như [kế hoạch](07-optimization-team-plan.md).
+
+Số liệu hiệu năng đo trên một máy local, ba lượt cho mỗi bản. Lượt chạy một và hai backend mới có một mẫu cho mỗi cấu hình.
+
 ## Benchmark trước và sau
 
 Bản trước là `dev` tại `919bcef`. Bản sau là Phase 2 tại `e43c7c5`. Hai JAR chạy lần lượt trên cùng máy Windows 16 luồng, với cùng Java 21, heap tối đa 1 GiB và cấu hình PostgreSQL 16.15 trong Docker giới hạn 2 CPU và 2 GiB RAM. Mỗi bản dùng một DB mới với cùng cách sinh dữ liệu gồm 50.000 chuyến tương lai, 100 tuyến và 500 tài khoản tải.
