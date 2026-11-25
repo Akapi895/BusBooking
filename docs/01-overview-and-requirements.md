@@ -116,7 +116,7 @@ Các mã **FR** mô tả khả năng nghiệp vụ, **không tương ứng một
 | **BR-10** | Tạo booking và cập nhật số ghế phải nhất quán trong cùng giao dịch, kể cả khi có yêu cầu đồng thời. |
 | **BR-11** | Booking lưu `unitPrice` và `totalAmount` tại thời điểm đặt, không tự động đổi theo giá Trip sau đó. |
 | **BR-12** | Chủ booking chỉ được hủy trước giờ đi hơn 30 phút. Quản trị được bỏ qua mốc thời gian. Hủy lặp trả `400 BUSINESS_ERROR`. |
-| **BR-13** | Hủy chuyến là chuyển trạng thái sang `CANCELLED`. Chuyến phải còn `SCHEDULED`, chưa khởi hành và không còn booking `CONFIRMED`. |
+| **BR-13** | Hủy chuyến là chuyển trạng thái sang `CANCELLED`. Chuyến phải còn `SCHEDULED` và chưa khởi hành. Mọi booking `CONFIRMED` của chuyến chuyển sang `REFUND_PENDING`, khách nhận email thông báo; admin hoàn tiền ngoài hệ thống rồi đánh dấu `REFUNDED`. |
 | **BR-14** | Không xóa vật lý nhà xe, địa điểm, phương tiện và tuyến đường qua API quản trị Pha 1. |
 | **BR-15** | Chức năng đăng ký công khai không cho phép tự chỉ định role `ADMIN` hay `SUPER_ADMIN`; API quản lý role không cấp `SUPER_ADMIN`. |
 | **BR-16** | Trong 24 giờ, cùng tài khoản và cùng `Idempotency-Key` trả lại booking gốc nếu nội dung trùng, hoặc trả lỗi nếu nội dung thay đổi. |

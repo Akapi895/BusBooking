@@ -40,6 +40,7 @@ Các mã HTTP thường gặp: `200` (đọc/cập nhật/hủy mềm thành cô
 | 18 | PUT | `/api/admin/trips/{tripId}` | Admin Trip | ADMIN / SUPER_ADMIN |
 | 19 | DELETE | `/api/admin/trips/{tripId}` | Admin Trip | ADMIN / SUPER_ADMIN |
 | 20 | GET | `/api/admin/bookings` | Admin Booking | ADMIN / SUPER_ADMIN |
+| 20a | POST | `/api/admin/bookings/{id}/refund` | Admin Booking | ADMIN / SUPER_ADMIN |
 | 21 | GET | `/api/admin/locations` | Admin Location | ADMIN / SUPER_ADMIN |
 | 22 | POST | `/api/admin/locations` | Admin Location | ADMIN / SUPER_ADMIN |
 | 23 | PUT | `/api/admin/locations/{locationId}` | Admin Location | ADMIN / SUPER_ADMIN |
@@ -187,7 +188,8 @@ Sau khi giao dịch đổi quyền thành công, backend ghi sự kiện `role_c
 | `POST /api/admin/trips` | `routeId`, `vehicleId`, `departureTime`, `arrivalTime`, `price` | Tạo `SCHEDULED`, số ghế ban đầu theo capacity xe |
 | `PUT /api/admin/trips/{tripId}` | Các trường Trip tương ứng | Chỉ cập nhật chuyến `SCHEDULED`; áp dụng kiểm tra đổi xe/sức chứa |
 | `DELETE /api/admin/trips/{tripId}` | `tripId` | Hủy mềm Trip; không xóa DB record |
-| `GET /api/admin/bookings` | `userId`, `tripId`, `status`, `page`, `size` (tùy chọn) | Xem danh sách booking toàn hệ thống theo trang |
+| `GET /api/admin/bookings` | `userId`, `tripId`, `status`, `page`, `size` (tùy chọn) | Xem danh sách booking toàn hệ thống theo trang; lọc `status=REFUND_PENDING` để xem vé chờ hoàn tiền |
+| `POST /api/admin/bookings/{id}/refund` | `id` | Đánh dấu vé `REFUND_PENDING` là `REFUNDED` sau khi đã hoàn tiền thủ công; trạng thái khác trả `400 BUSINESS_ERROR` |
 
 Ví dụ tạo/cập nhật Trip:
 
@@ -203,10 +205,11 @@ Ví dụ tạo/cập nhật Trip:
 
 - Route và Vehicle phải tồn tại và đang hoạt động. Giờ đi phải nằm trong tương lai, giờ đến sau giờ đi. Hai chuyến trên cùng một xe có thể nối tiếp nhưng không được chồng giờ. Chuyến đã hủy được loại khỏi kiểm tra lịch.
 - Chuyến có booking `CONFIRMED` giữ tuyến và giờ đi/đến. Có thể đổi xe nếu đủ sức chứa hoặc đổi giá cho lượt đặt sau. Các booking đã xác nhận giữ nguyên đơn giá.
-- Chỉ hủy chuyến còn `SCHEDULED`, chưa tới giờ đi và không còn booking `CONFIRMED`. Xung đột trả `409 TRIP_CONFLICT`. Hủy lặp chuyến đã `CANCELLED` trả lại trạng thái hiện tại.
+- Chỉ hủy chuyến còn `SCHEDULED` và chưa tới giờ đi; trạng thái khác trả `409 TRIP_CONFLICT`. Hủy lặp chuyến đã `CANCELLED` trả lại trạng thái hiện tại.
+- Khi hủy, mọi booking `CONFIRMED` chuyển sang `REFUND_PENDING` trong cùng transaction và ghế được trả lại. Email thông báo được gửi qua outbox (cột `notice_due_at`), thử lại tối đa 8 lần, mỗi lần cách 5 phút. Khách không tự hủy được vé `REFUND_PENDING`.
 - Job chuyển chuyến từ `SCHEDULED` sang `IN_PROGRESS` khi đến giờ đi và sang `COMPLETED` khi đến giờ đến. Nếu job chạy trễ, chuyến đã qua giờ đến được chuyển thẳng sang `COMPLETED`.
 - **Không có** API Admin xem Booking riêng theo ID hoặc sửa tùy ý trạng thái Booking: dùng `GET /api/bookings/{bookingId}` và `DELETE /api/bookings/{bookingId}` có sẵn, để không bypass nghiệp vụ hoàn ghế.
-- Chưa có workflow hoàn tiền, hủy hàng loạt Booking hoặc thông báo hủy chuyến. Đây là giới hạn nghiệp vụ của Pha 1.
+- Chưa có cổng thanh toán: hệ thống chỉ ghi nhận khoản cần hoàn (`total_amount`), việc chuyển tiền do admin làm thủ công.
 
 ### 4.3.7. Admin Location
 

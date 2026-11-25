@@ -33,4 +33,10 @@ public class AdminBookingController {
         return service.listForAdmin(userId, tripId, status, pagination.page(), pagination.size())
                 .stream().map(mapper::toResponse).toList();
     }
+
+    @PostMapping("/{id}/refund")
+    @Operation(summary = "Mark a REFUND_PENDING booking as REFUNDED after paying the customer back")
+    public BookingResponse markRefunded(@PathVariable Long id) {
+        return mapper.toResponse(service.markRefunded(id));
+    }
 }

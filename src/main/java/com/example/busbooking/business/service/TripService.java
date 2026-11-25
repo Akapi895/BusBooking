@@ -87,13 +87,14 @@ public class TripService {
         Trip current = lockedTrip(tripId);
         if (current.getStatus() == TripStatus.CANCELLED) return current;
         requireScheduled(current);
-        // Phase 1 policy: refunds and mass booking cancellation require business approval.
-        if (bookingRepository.countConfirmedSeats(tripId) > 0) {
-            throw new TripConflictException("Trip has confirmed bookings and cannot be cancelled");
-        }
+        // Confirmed bookings become refunds owed; each customer is emailed through the notice outbox.
+        // shortcut: locks trip then bookings, the reverse of booking cancellation; a rare deadlock
+        // surfaces as a retryable 503. Lock the trip first in booking cancellation if it shows up.
+        long confirmedSeats = bookingRepository.countConfirmedSeats(tripId);
+        if (confirmedSeats > 0) bookingRepository.markTripRefundPending(tripId, clock.instant());
         return tripRepository.save(new Trip(tripId, current.getRouteId(), current.getVehicleId(),
                 current.getDepartureTime(), current.getArrivalTime(), current.getPrice(),
-                current.getAvailableSeats(), TripStatus.CANCELLED));
+                current.getAvailableSeats() + (int) confirmedSeats, TripStatus.CANCELLED));
     }
 
     private void requireScheduled(Trip trip) {

@@ -34,6 +34,7 @@ class AdminManagementIntegrationTest {
     @Autowired ObjectMapper json;
     @Autowired BookingService bookings;
     @Autowired TripService trips;
+    @Autowired com.example.busbooking.data.adapter.TripCancellationNotices notices;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired jakarta.persistence.EntityManager entityManager;
     Long user, otherUser, admin, superAdmin, origin, destination, route, operator, vehicle;
@@ -346,16 +347,6 @@ class AdminManagementIntegrationTest {
         assertSeatInvariant(id, 10, 0);
     }
 
-    @Test void confirmedBookingPreventsCancellationWithoutChangingAnything() throws Exception {
-        Long id = createTrip();
-        var confirmed = bookings.create(user, id, "Passenger", "0901234567", 2);
-        mvc.perform(delete("/api/admin/trips/" + id).header("Authorization", token(admin)))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error").value("TRIP_CONFLICT"));
-        assertThat(jdbc.queryForObject("SELECT status FROM trips WHERE id = ?", String.class, id)).isEqualTo("SCHEDULED");
-        assertThat(jdbc.queryForObject("SELECT status FROM bookings WHERE id = ?", String.class, confirmed.getId())).isEqualTo("CONFIRMED");
-        assertSeatInvariant(id, 10, 2);
-    }
-
     @Test void cancelChecksAuthMissingIdAndNonScheduledStates() throws Exception {
         Long id = createTrip();
         mvc.perform(delete("/api/admin/trips/" + id)).andExpect(status().isUnauthorized());
@@ -376,13 +367,39 @@ class AdminManagementIntegrationTest {
         assertSeatInvariant(id, 10, 0);
     }
 
-    @Test @Tag("concurrency") void cancellationWaitsForBookingAndThenRejectsConfirmedBooking() throws Exception {
+    @Test @Tag("concurrency") void cancellationWaitsForBookingAndThenRefundsIt() throws Exception {
         Long id = createTrip();
         Throwable failure = compete(() -> bookings.create(user, id, "Passenger", "0901234567", 1),
                 () -> trips.cancel(id));
-        assertThat(failure).isInstanceOf(TripConflictException.class);
-        assertThat(jdbc.queryForObject("SELECT status FROM trips WHERE id = ?", String.class, id)).isEqualTo("SCHEDULED");
-        assertSeatInvariant(id, 10, 1);
+        assertThat(failure).isNull();
+        assertThat(jdbc.queryForObject("SELECT status FROM trips WHERE id = ?", String.class, id)).isEqualTo("CANCELLED");
+        assertThat(jdbc.queryForObject("SELECT status FROM bookings WHERE trip_id = ?", String.class, id)).isEqualTo("REFUND_PENDING");
+        assertSeatInvariant(id, 10, 0);
+    }
+
+    @Test void cancellingTripWithBookingsQueuesNoticesAndTracksManualRefunds() throws Exception {
+        Long id = createTrip();
+        var booking = bookings.create(user, id, "Passenger", "0901234567", 2);
+        mvc.perform(delete("/api/admin/trips/" + id).header("Authorization", token(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+        assertSeatInvariant(id, 10, 0);
+
+        var notice = notices.claim(java.time.Instant.now().plusSeconds(1)).orElseThrow();
+        assertThat(notice.bookingId()).isEqualTo(booking.getId());
+        assertThat(notice.refund()).isEqualByComparingTo(booking.getTotalAmount());
+        assertThat(notices.claim(java.time.Instant.now().plusSeconds(1))).as("Claimed notice is leased").isEmpty();
+        notices.sent(notice.bookingId());
+        assertThat(jdbc.queryForObject("SELECT notice_due_at IS NULL FROM bookings WHERE id = ?", Boolean.class, booking.getId())).isTrue();
+
+        mvc.perform(delete("/api/bookings/" + booking.getId()).header("Authorization", token(user)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/admin/bookings/" + booking.getId() + "/refund").header("Authorization", token(user)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/admin/bookings/" + booking.getId() + "/refund").header("Authorization", token(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
+        assertThat(jdbc.queryForObject("SELECT refunded_at IS NOT NULL FROM bookings WHERE id = ?", Boolean.class, booking.getId())).isTrue();
+        mvc.perform(post("/api/admin/bookings/" + booking.getId() + "/refund").header("Authorization", token(admin)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test @Tag("concurrency") void twoDifferentUsersCannotBookTheFinalSeat() throws Exception {

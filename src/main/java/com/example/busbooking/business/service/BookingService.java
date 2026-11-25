@@ -56,10 +56,8 @@ public class BookingService {
             var replay = idempotency.reserve(userId, key, hash, clock.instant());
             if (replay != null) {
                 if (!hash.equals(replay.requestHash())) throw new IdempotencyConflictException();
-                Booking stored = bookingRepository.findById(replay.bookingId()).orElseThrow();
-                return new Booking(stored.getId(), stored.getBookingCode(), stored.getUserId(), stored.getTripId(),
-                        stored.getPassengerName(), stored.getPassengerPhone(), stored.getQuantity(), stored.getUnitPrice(),
-                        stored.getTotalAmount(), BookingStatus.CONFIRMED, stored.getBookedAt());
+                // Report the booking as it is now: it may have been cancelled or refunded since.
+                return bookingRepository.findById(replay.bookingId()).orElseThrow();
             }
         }
         var reservation = tripRepository.reserveSeats(tripId, quantity, TravelTime.now(clock))
@@ -128,6 +126,9 @@ public class BookingService {
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             return booking;
         }
+        if (booking.getStatus() != BookingStatus.CONFIRMED) {
+            throw new BusinessException("The trip was cancelled; this booking is being refunded");
+        }
         Trip trip = tripRepository.findByIdForUpdate(booking.getTripId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Trip not found with id: " + booking.getTripId()));
@@ -146,6 +147,17 @@ public class BookingService {
             throw new BusinessException("Unable to restore available seats");
         }
         return bookingRepository.updateStatus(bookingId, BookingStatus.CANCELLED);
+    }
+
+    /** Records that an admin has paid back a booking of a cancelled trip outside the system. */
+    @Transactional
+    public Booking markRefunded(Long bookingId) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found with id: " + bookingId));
+        if (booking.getStatus() != BookingStatus.REFUND_PENDING) {
+            throw new BusinessException("Only bookings awaiting a refund can be marked refunded");
+        }
+        return bookingRepository.markRefunded(bookingId, clock.instant());
     }
 
     private void verifyAccess(Long userId, boolean admin, Booking booking) {

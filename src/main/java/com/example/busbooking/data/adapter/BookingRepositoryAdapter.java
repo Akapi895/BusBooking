@@ -56,4 +56,11 @@ public class BookingRepositoryAdapter implements BookingRepository {
         repository.updateStatus(id, status);
         return repository.findById(id).map(mapper::toDomain).orElseThrow();
     }
+    public int markTripRefundPending(Long tripId, java.time.Instant noticeDue) {
+        return repository.markTripRefundPending(tripId, noticeDue);
+    }
+    public Booking markRefunded(Long id, java.time.Instant refundedAt) {
+        repository.markRefunded(id, refundedAt);
+        return repository.findById(id).map(mapper::toDomain).orElseThrow();
+    }
 }

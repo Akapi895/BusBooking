@@ -162,11 +162,14 @@ class AdminTripServiceTest {
         order.verify(trips).save(any());
     }
 
-    @Test void cancelWithConfirmedBookingsConflictsWithoutSaving() {
+    @Test void cancelWithConfirmedBookingsQueuesRefundsAndReleasesSeats() {
         when(trips.findByIdForUpdate(3L)).thenReturn(Optional.of(existing(2L, TripStatus.SCHEDULED)));
-        when(bookings.countConfirmedSeats(3L)).thenReturn(1L);
-        assertThatThrownBy(() -> service.cancel(3L)).isInstanceOf(TripConflictException.class);
-        verify(trips, never()).save(any());
+        when(bookings.countConfirmedSeats(3L)).thenReturn(3L);
+        when(trips.save(any())).thenAnswer(call -> call.getArgument(0));
+        Trip cancelled = service.cancel(3L);
+        assertThat(cancelled.getStatus()).isEqualTo(TripStatus.CANCELLED);
+        assertThat(cancelled.getAvailableSeats()).isEqualTo(10);
+        verify(bookings).markTripRefundPending(eq(3L), any());
     }
 
     @Test void repeatedCancellationReturnsCurrentTripWithoutSaving() {

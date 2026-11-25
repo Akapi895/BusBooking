@@ -16,4 +16,7 @@ public interface BookingRepository {
     List<Booking> findByUserId(Long userId);
     List<Booking> findByUserId(Long userId, int page, int size);
     Booking updateStatus(Long bookingId, com.example.busbooking.domain.enums.BookingStatus status);
+    /** Moves every confirmed booking of the trip to REFUND_PENDING and queues its cancellation email. */
+    int markTripRefundPending(Long tripId, java.time.Instant noticeDue);
+    Booking markRefunded(Long bookingId, java.time.Instant refundedAt);
 }

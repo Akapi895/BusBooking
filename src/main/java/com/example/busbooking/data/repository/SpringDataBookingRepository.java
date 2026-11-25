@@ -32,4 +32,18 @@ public interface SpringDataBookingRepository extends JpaRepository<BookingEntity
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE BookingEntity b SET b.status = :status WHERE b.id = :id")
     int updateStatus(@Param("id") Long id, @Param("status") BookingStatus status);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+        UPDATE bookings SET status = 'REFUND_PENDING', notice_due_at = :due
+         WHERE trip_id = :tripId AND status = 'CONFIRMED'
+        """, nativeQuery = true)
+    int markTripRefundPending(@Param("tripId") Long tripId, @Param("due") java.time.Instant due);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+        UPDATE bookings SET status = 'REFUNDED', refunded_at = :at
+         WHERE id = :id AND status = 'REFUND_PENDING'
+        """, nativeQuery = true)
+    int markRefunded(@Param("id") Long id, @Param("at") java.time.Instant at);
 }

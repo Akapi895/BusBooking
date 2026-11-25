@@ -43,6 +43,9 @@ class BookingServiceTest {
     @org.mockito.Spy java.time.Clock clock = java.time.Clock.fixed(java.time.Instant.parse("2026-01-01T00:00:00Z"), java.time.ZoneOffset.UTC);
     private final java.time.LocalDateTime future = java.time.LocalDateTime.of(2026, 1, 2, 8, 0);
 
+    @Mock
+    private com.example.busbooking.business.port.repository.BookingIdempotencyRepository idempotency;
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -336,5 +339,44 @@ class BookingServiceTest {
 
         bookingService.cancel(99L, true, BOOKING_ID);
         verify(bookingRepository).updateStatus(BOOKING_ID, BookingStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_whenBookingAwaitsRefund_shouldRejectWithoutTouchingTrip() {
+        Booking booking = mock(Booking.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(booking.getUserId()).thenReturn(USER_ID);
+        when(booking.getStatus()).thenReturn(BookingStatus.REFUND_PENDING);
+
+        assertThrows(BusinessException.class, () -> bookingService.cancel(USER_ID, false, BOOKING_ID));
+        verifyNoInteractions(tripRepository);
+    }
+
+    @Test
+    void markRefunded_onlyAcceptsBookingsAwaitingRefund() {
+        Booking booking = mock(Booking.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
+        for (BookingStatus status : List.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED, BookingStatus.REFUNDED)) {
+            when(booking.getStatus()).thenReturn(status);
+            assertThrows(BusinessException.class, () -> bookingService.markRefunded(BOOKING_ID));
+        }
+        verify(bookingRepository, never()).markRefunded(anyLong(), any());
+
+        when(booking.getStatus()).thenReturn(BookingStatus.REFUND_PENDING);
+        Booking refunded = mock(Booking.class);
+        when(bookingRepository.markRefunded(eq(BOOKING_ID), any())).thenReturn(refunded);
+        assertSame(refunded, bookingService.markRefunded(BOOKING_ID));
+    }
+
+    @Test
+    void create_whenKeyReplaysCancelledBooking_shouldReturnItsCurrentStatus() {
+        Booking cancelled = mock(Booking.class);
+        when(idempotency.reserve(eq(USER_ID), eq("retry"), anyString(), any()))
+                .thenAnswer(call -> new com.example.busbooking.business.port.repository.BookingIdempotencyRepository
+                        .Replay(call.getArgument(2), BOOKING_ID));
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(cancelled));
+
+        assertSame(cancelled, bookingService.create(USER_ID, TRIP_ID, "Nguyen Van A", "0901234567", 2, "retry"));
+        verify(tripRepository, never()).reserveSeats(anyLong(), anyInt(), any());
     }
 }
