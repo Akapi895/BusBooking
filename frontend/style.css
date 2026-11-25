@@ -51,11 +51,11 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-w
 .search-band { background: var(--band); color: var(--band-ink); padding-block: 36px 40px; }
 .search-band h1 { font-size: clamp(26px, 4vw, 34px); }
 .lede { margin: 6px 0 24px; color: var(--band-muted); }
-.search { display: grid; grid-template-columns: 1fr auto 1fr 190px auto; align-items: stretch; padding: 6px; background: var(--surface); border-radius: var(--r-lg); box-shadow: 0 14px 32px -14px rgb(0 0 0 / .45); }
+.search { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 190px auto; align-items: stretch; padding: 6px; background: var(--surface); border-radius: var(--r-lg); box-shadow: 0 14px 32px -14px rgb(0 0 0 / .45); }
 .search label { gap: 2px; padding: 8px 14px; border-radius: var(--r); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
 .search label + label { box-shadow: -1px 0 0 var(--line); }
 .search label:focus-within { background: var(--accent-soft); box-shadow: none; }
-.search input, .search select { border: 0; padding: 2px 0; background: transparent; font-size: 16px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.search input, .search select { width: 100%; border: 0; padding: 2px 0; background: transparent; font-size: 16px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); }
 .search :is(input, select):focus-visible { outline: none; }
 .search button { padding-inline: 26px; font-size: 15px; border-radius: 8px; }
 .search button.swap { align-self: center; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; color: var(--accent); }
@@ -63,32 +63,42 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-w
 
 /* Departures */
 .page { padding-block: 28px 56px; display: flex; flex-direction: column; gap: 16px; }
-.trips { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.trip { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto; align-items: center; gap: 14px 32px; padding: 18px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); transition: border-color .15s; }
-.trip:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
-.journey { display: grid; grid-template-columns: auto minmax(56px, 1fr) auto; align-items: start; gap: 14px; }
-.stop { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.stop.end { text-align: right; }
-.stop span { font-size: 14px; color: var(--muted); }
-.clock { font: 700 24px/1.15 var(--mono); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.clock sup { font-size: 11px; color: var(--warn); margin-left: 2px; }
-.leg { position: relative; height: 28px; display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle, var(--accent) 3px, transparent 3.5px) left center / 8px 8px no-repeat,
-              radial-gradient(circle, var(--accent) 3px, transparent 3.5px) right center / 8px 8px no-repeat; }
-.leg::before { content: ""; position: absolute; inset: 50% 10px auto; border-top: 2px dashed var(--line); }
-.leg span { position: relative; padding: 0 8px; background: var(--surface); font: 500 12px var(--mono); color: var(--muted); }
-.info { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 14px; }
-.info .when { font-weight: 600; }
-.info .when small { font: 500 12px var(--mono); color: var(--muted); margin-left: 6px; }
-.info .op { color: var(--muted); }
-.seats { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--ok); }
-.seats .bar { width: 88px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.seats .bar i { display: block; height: 100%; width: var(--fill); background: currentColor; }
+.trips { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.day-head { margin-top: 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.day-head:first-child { margin-top: 0; }
+
+/* Ticket: body on the left, tear-off stub on the right, split by a perforation with two notches */
+.trip { display: grid; grid-template-columns: minmax(0, 1fr) 230px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
+.trip:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 10px 24px -18px rgb(18 34 37 / .45); }
+.ticket { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 18px 24px 20px; }
+.ticket-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.ticket-head b { font-size: 16px; font-weight: 700; }
+.ticket-head span:not(.chip) { font-size: 14px; color: var(--muted); }
+.ticket-head span:not(.chip)::before { content: "·"; margin-right: 10px; }
+.timeline { display: grid; grid-template-columns: auto 12px minmax(0, 1fr); align-items: center; column-gap: 14px; }
+.timeline time { font-size: 20px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.timeline sup { margin-left: 2px; font-size: 11px; font-weight: 600; color: var(--warn); }
+.timeline .place { font-size: 15px; font-weight: 500; }
+.timeline .dot { justify-self: center; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.timeline .dot.end { background: var(--surface); box-shadow: inset 0 0 0 2.5px var(--accent); }
+.timeline .rail { justify-self: center; align-self: stretch; min-height: 26px; border-left: 2px dotted color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.timeline .dur { font-size: 13px; color: var(--muted); }
+.stub { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 18px 22px; border-left: 2px dashed var(--line); text-align: center; }
+.stub::before, .stub::after { content: ""; position: absolute; left: -10px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line); }
+.stub::before { top: -10px; clip-path: inset(50% 0 0 0); }
+.stub::after { bottom: -10px; clip-path: inset(0 0 50% 0); }
+.price { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.seats { font-size: 13px; font-weight: 600; color: var(--ok); }
 .seats.low { color: var(--warn); }
 .seats.none { color: var(--err); }
-.buy { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.price { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.price small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.stub .primary { margin-top: 6px; padding-block: 10px; }
+/* Wide screens: operator on the left, timeline beside it, so the ticket body isn't half empty */
+@media (min-width: 900px) {
+  .ticket { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); align-items: center; column-gap: 32px; padding-block: 20px; }
+  .ticket-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .ticket-head b { font-size: 17px; }
+  .ticket-head span:not(.chip)::before { content: none; }
+}
 .empty { padding: 40px 20px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--r-lg); }
 
 /* Status chips: state is carried by color and label together */
@@ -167,11 +177,15 @@ dialog::backdrop { background: rgb(8 20 24 / .55); }
 
 @media (max-width: 760px) {
   .wrap { padding-inline: 16px; }
-  .search { grid-template-columns: 1fr auto 1fr; }
+  .search { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
   .search label:nth-child(4) { grid-column: 1 / -1; box-shadow: 0 -1px 0 var(--line); }
   .search button.primary { grid-column: 1 / -1; padding-block: 12px; margin-top: 4px; }
-  .trip { grid-template-columns: minmax(0, 1fr); padding: 16px; }
-  .buy { flex-direction: row; align-items: center; justify-content: space-between; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .trip { grid-template-columns: minmax(0, 1fr); }
+  .ticket { padding: 16px 16px 14px; }
+  .stub { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 12px; padding: 14px 16px; text-align: left; border-left: 0; border-top: 2px dashed var(--line); }
+  .stub::before { top: -10px; left: -10px; clip-path: inset(0 0 0 50%); }
+  .stub::after { top: -10px; bottom: auto; left: auto; right: -10px; clip-path: inset(0 50% 0 0); }
+  .stub .primary { margin: 0 0 0 auto; }
   .account #who { display: none; }
   .topbar-inner { gap: 0 12px; padding-top: 6px; }
   .account { margin-left: auto; }

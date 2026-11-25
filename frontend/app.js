@@ -131,32 +131,44 @@ $('#swap').addEventListener('click', () => {
   [o.value, d.value] = [d.value, o.value];
 });
 
+const longDay = (v) => new Date(v).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+
+// A ticket: operator + vertical timeline on the left, a tear-off stub with price and action on the right.
 function tripCard(t) {
   const seats = t.availableSeats ?? 0;
-  const cap = t.vehicle?.seatCapacity;
   const bookable = t.status === 'SCHEDULED' && seats > 0;
   const next = t.arrivalTime ? dayDiff(t.departureTime, t.arrivalTime) : 0;
   return `
     <li class="trip">
-      <div class="journey">
-        <div class="stop"><b class="clock">${clock(t.departureTime)}</b><span>${esc(t.origin)}</span></div>
-        <div class="leg"><span>${duration(t)}</span></div>
-        <div class="stop end"><b class="clock">${clock(t.arrivalTime)}${next > 0 ? `<sup>+${next}</sup>` : ''}</b><span>${esc(t.destination)}</span></div>
+      <div class="ticket">
+        <div class="ticket-head">
+          <b>${esc(t.operatorName)}</b>
+          ${t.vehicleType ? `<span>${esc(t.vehicleType)}</span>` : ''}
+          ${t.status === 'SCHEDULED' ? '' : chip(t.status)}
+        </div>
+        <div class="timeline">
+          <time>${clock(t.departureTime)}</time><i class="dot"></i><span class="place">${esc(t.origin)}</span>
+          <span></span><i class="rail"></i><span class="dur">${duration(t)}</span>
+          <time>${clock(t.arrivalTime)}${next > 0 ? `<sup title="Đến ngày hôm sau">+${next}</sup>` : ''}</time><i class="dot end"></i><span class="place">${esc(t.destination)}</span>
+        </div>
       </div>
-      <div class="info">
-        <span class="when">${esc(day(t.departureTime))}<small>Chuyến #${t.id}</small></span>
-        <span class="op">${esc(t.operatorName)}${t.vehicleType ? ' · ' + esc(t.vehicleType) : ''}</span>
-        <span class="seats ${seats === 0 ? 'none' : seats <= 5 ? 'low' : ''}">
-          ${cap ? `<span class="bar"><i style="--fill:${Math.min(100, (seats / cap) * 100)}%"></i></span>` : ''}
-          ${seats === 0 ? 'Hết chỗ' : `Còn ${seats}${cap ? '/' + cap : ''} chỗ`}
-        </span>
-      </div>
-      <div class="buy">
-        <span class="price">${money(t.price)} <small>/ ghế</small></span>
-        ${t.status === 'SCHEDULED' ? '' : chip(t.status)}
+      <div class="stub">
+        <span class="price">${money(t.price)}</span>
+        <span class="seats ${seats === 0 ? 'none' : seats <= 5 ? 'low' : ''}">${seats === 0 ? 'Hết chỗ' : `Còn ${seats} chỗ trống`}</span>
         <button class="primary" data-book="${t.id}" ${bookable ? '' : 'disabled'}>Chọn chuyến</button>
       </div>
     </li>`;
+}
+
+// Group the (already time-ordered) trips under one heading per departure day.
+function tripList(trips) {
+  let lastDay = '';
+  return trips.map((t) => {
+    const d = t.departureTime.slice(0, 10);
+    const head = d === lastDay ? '' : `<li class="day-head">${esc(longDay(t.departureTime))}</li>`;
+    lastDay = d;
+    return head + tripCard(t);
+  }).join('');
 }
 
 async function loadTrips(page = tripPage) {
@@ -170,7 +182,7 @@ async function loadTrips(page = tripPage) {
     tripPage = page;
     updatePage('trip', tripPage, trips.length);
     tripsById = new Map(trips.map((t) => [String(t.id), t]));
-    $('#trips').innerHTML = trips.map(tripCard).join('')
+    $('#trips').innerHTML = tripList(trips)
       || '<li class="empty">Không có chuyến nào khớp. Thử bỏ bớt điều kiện hoặc chọn ngày khác.</li>';
   } catch (err) { if (request === tripRequest) toast(err.message, true); }
 }
