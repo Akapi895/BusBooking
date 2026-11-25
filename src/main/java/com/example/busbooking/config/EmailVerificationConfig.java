@@ -6,6 +6,11 @@ import com.example.busbooking.business.port.repository.EmailVerificationReposito
 import com.example.busbooking.business.port.security.VerificationCodeProvider;
 import com.example.busbooking.business.service.EmailVerificationService;
 import com.example.busbooking.notification.SmtpEmailVerificationSender;
+import com.example.busbooking.notification.SmtpPasswordResetSender;
+import com.example.busbooking.business.port.notification.PasswordResetSender;
+import com.example.busbooking.business.port.repository.PasswordResetRepository;
+import com.example.busbooking.business.port.security.PasswordHasher;
+import com.example.busbooking.business.service.PasswordResetService;
 import com.example.busbooking.security.HmacVerificationCodeProvider;
 import com.example.busbooking.security.VerificationPayloadCipher;
 import org.springframework.beans.factory.ObjectProvider;
@@ -40,5 +45,16 @@ public class EmailVerificationConfig {
             VerificationCodeProvider codes, EmailVerificationSender sender, Clock clock,
             ObjectProvider<VerificationQueue> queue) {
         return new EmailVerificationService(repository, codes, sender, clock, queue.getIfAvailable());
+    }
+
+    @Bean
+    public PasswordResetSender passwordResetSender(JavaMailSender sender, @Value("${auth.mail-from}") String from) {
+        return new SmtpPasswordResetSender(sender, from);
+    }
+
+    @Bean
+    public PasswordResetService passwordResetService(PasswordResetRepository repository, VerificationCodeProvider codes,
+            PasswordResetSender sender, PasswordHasher passwords, Clock clock) {
+        return new PasswordResetService(repository, codes, sender, passwords, clock);
     }
 }

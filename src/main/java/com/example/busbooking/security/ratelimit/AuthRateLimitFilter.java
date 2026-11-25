@@ -12,7 +12,8 @@ import java.io.IOException;
 import java.util.List;
 
 public final class AuthRateLimitFilter extends OncePerRequestFilter {
-    private static final List<Endpoint> ENDPOINTS = List.of("register", "login", "verify-email", "resend-verification")
+    private static final List<Endpoint> ENDPOINTS = List.of("register", "login", "verify-email", "resend-verification",
+            "forgot-password", "reset-password")
             .stream().map(name -> {
                 String path = "/api/auth/" + name;
                 return new Endpoint(path, PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, path));

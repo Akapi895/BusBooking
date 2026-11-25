@@ -13,7 +13,9 @@ import org.springframework.core.env.Environment;
 @Configuration
 @EnableConfigurationProperties(BootstrapSuperAdminProperties.class)
 public class UserConfig {
-    @Bean public UserService userService(UserRepository users) { return new UserService(users); }
+    @Bean public UserService userService(UserRepository users, PasswordHasher passwords) {
+        return new UserService(users, passwords);
+    }
     @Bean public RoleManagementService roleManagementService(UserRepository users, RoleManagementRepository roles) {
         return new RoleManagementService(users, roles);
     }
