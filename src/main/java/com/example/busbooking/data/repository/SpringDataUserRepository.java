@@ -23,6 +23,11 @@ public interface SpringDataUserRepository extends JpaRepository<UserEntity, Long
     @Query("update UserEntity u set u.tokenVersion = u.tokenVersion + 1 where u.id = :id")
     int incrementTokenVersion(Long id);
 
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update UserEntity u set u.passwordHash = :hash, u.tokenVersion = u.tokenVersion + 1 "
+            + "where u.id = :id and u.status = :status and u.emailVerified = true")
+    int changePassword(@Param("id") Long id, @Param("hash") String passwordHash, @Param("status") UserStatus status);
+
     @Override
     @EntityGraph(attributePaths = "role")
     Optional<UserEntity> findById(Long id);

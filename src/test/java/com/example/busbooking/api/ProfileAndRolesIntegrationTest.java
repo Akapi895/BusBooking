@@ -81,6 +81,27 @@ class ProfileAndRolesIntegrationTest {
     }
 
     @Test
+    void changePasswordChecksTheCurrentPasswordAndRevokesEveryEarlierToken() throws Exception {
+        String token = userToken(EMPLOYEE);
+        putPassword(token, Map.of("currentPassword", "Wrong-pass1", "newPassword", "NewPassword456"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details.currentPassword").exists());
+        putPassword(token, Map.of("currentPassword", "Password123", "newPassword", "Password123"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details.newPassword").exists());
+        putPassword(token, Map.of("currentPassword", "Password123", "newPassword", "short"))
+                .andExpect(status().isBadRequest());
+        putPassword(token, Map.of("currentPassword", "Password123", "newPassword", "NewPassword456"))
+                .andExpect(status().isNoContent());
+        profile(token).andExpect(status().isUnauthorized());
+        assertThatThrownBy(() -> auth.login(new LoginCommand(EMPLOYEE, "Password123")))
+                .isInstanceOf(InvalidCredentialsException.class);
+        String fresh = auth.login(new LoginCommand(EMPLOYEE, "NewPassword456")).token().value();
+        profile(fresh).andExpect(status().isOk());
+        mvc.perform(put("/api/users/me/password").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsBytes(Map.of("currentPassword", "x", "newPassword", "NewPassword789"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void rejectsMissingInvalidAndPrivilegedFieldsWithoutChangingProfile() throws Exception {
         String token = userToken(EMPLOYEE);
         for (String field : List.of("id", "role", "status", "email", "password", "emailVerified", "createdAt", "updatedAt")) {
@@ -318,6 +339,10 @@ class ProfileAndRolesIntegrationTest {
     private ResultActions admin(String token) throws Exception { return mvc.perform(get("/api/admin/phase4-check").header("Authorization", "Bearer " + token)); }
     private ResultActions putProfile(String token, Object body) throws Exception {
         return mvc.perform(put("/api/users/me").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(body)));
+    }
+    private ResultActions putPassword(String token, Object body) throws Exception {
+        return mvc.perform(put("/api/users/me/password").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(body)));
     }
     private ResultActions changeRole(String token, long userId, String role) throws Exception {
         return mvc.perform(put("/api/admin/users/" + userId + "/role").header("Authorization", "Bearer " + token)

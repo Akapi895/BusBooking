@@ -58,6 +58,12 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    @Transactional
+    public boolean changePassword(Long userId, String passwordHash) {
+        return repository.changePassword(userId, passwordHash, UserStatus.ACTIVE) == 1;
+    }
+
+    @Override
     public Optional<User> findSuperAdmin() {
         return repository.findByRole_Name(RoleName.SUPER_ADMIN).map(mapper::toDomain);
     }

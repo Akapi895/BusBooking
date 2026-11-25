@@ -247,6 +247,7 @@ class AuthServiceIntegrationTest {
         UserRepository synchronizedUsers = new UserRepository() {
             public Optional<Principal> findActiveVerifiedPrincipal(Long id) { return users.findActiveVerifiedPrincipal(id); }
             @Override public void revokeTokens(Long userId) { users.revokeTokens(userId); }
+            @Override public boolean changePassword(Long userId, String hash) { return users.changePassword(userId, hash); }
             public Optional<User> findById(Long id) { return users.findById(id); }
             public Optional<User> findByEmail(String email) { return users.findByEmail(email); }
             public User save(User user) { return users.save(user); }

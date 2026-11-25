@@ -13,7 +13,7 @@ import static org.mockito.Mockito.*;
 
 class UserServiceTest {
     private final UserRepository users = mock(UserRepository.class);
-    private final UserService service = new UserService(users);
+    private final UserService service = new UserService(users, mock(com.example.busbooking.business.port.security.PasswordHasher.class));
 
     @Test
     void updatesOnlyNameAndPhoneThroughTheDedicatedPort() {

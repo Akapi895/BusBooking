@@ -64,6 +64,7 @@ Các mã HTTP thường gặp: `200` (đọc/cập nhật/hủy mềm thành cô
 | `POST /api/auth/login` | Bắt buộc `email`, `password`; chỉ tài khoản `ACTIVE` đã xác minh email được đăng nhập | `200`, `LoginResponse` gồm `token`, `tokenType`, `expiresIn` (giây), `user` |
 | `GET /api/auth/me` | JWT trong header | `200`, `CurrentUserResponse`: `id`, `fullName`, `email`, `phone`, `role`, `emailVerified` |
 | `POST /api/auth/logout` | JWT trong header | `204`; tăng `token_version`, mọi token cấp trước đó trả `401` |
+| `PUT /api/users/me/password` | JWT; `currentPassword`, `newPassword` | `204`; sai mật khẩu hiện tại trả `400`; tăng `token_version`, mọi token cũ (kể cả token đang dùng) trả `401`; giới hạn theo tài khoản như login |
 | `POST /api/auth/verify-email` | Bắt buộc `email`, `code` (chuỗi 6 chữ số, có thể bắt đầu bằng `0`) | `204`, không có body |
 | `POST /api/auth/resend-verification` | Bắt buộc `email` hợp lệ | `202`, thông báo chung |
 
