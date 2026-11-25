@@ -33,7 +33,7 @@ class BookingControllerTest {
     @Mock
     private BookingDtoMapper mapper;
 
-    @org.mockito.Spy com.example.busbooking.api.controller.BookingAdmission admission = new com.example.busbooking.api.controller.BookingAdmission(8);
+    @org.mockito.Spy com.example.busbooking.api.controller.BookingAdmission admission = new com.example.busbooking.api.controller.BookingAdmission(8, 8);
 
     @InjectMocks
     private BookingController bookingController;
