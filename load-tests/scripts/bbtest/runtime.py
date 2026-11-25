@@ -31,6 +31,7 @@ class Runtime:
         self.otp_secret = base64.b64encode(secrets.token_bytes(32)).decode()
         self.outbox_secret = base64.b64encode(secrets.token_bytes(32)).decode()
         self.app = self.mail = None
+        self.server_cpus = None
         self.pg_started = False
         self.pgdir = Path("/tmp") / (self.db + "_pg")
         self.jdk = self.root / "jdk"
@@ -48,7 +49,20 @@ class Runtime:
 
     def pg_command(self, args, **kwargs):
         prefix = ["runuser", "-u", "postgres", "--"] if os.geteuid() == 0 else []
-        return self.command(prefix + [str(x) for x in args], **kwargs)
+        return self.command(prefix + [str(x) for x in args], **self.server_side(), **kwargs)
+
+    def split_cpus(self):
+        """Pin backend services and the load generator to disjoint CPUs so Locust cannot take backend CPU."""
+        cpus = sorted(os.sched_getaffinity(0))
+        if not self.config["runtime"].get("cpu_split", True) or len(cpus) < 2:
+            return
+        self.server_cpus = set(cpus[:(len(cpus) + 1) // 2])
+        # This process and every generator it starts keep only the remaining CPUs.
+        os.sched_setaffinity(0, set(cpus) - self.server_cpus)
+
+    def server_side(self):
+        cpus = self.server_cpus
+        return {"preexec_fn": lambda: os.sched_setaffinity(0, cpus)} if cpus else {}
 
     @staticmethod
     def free_port(port):
@@ -58,6 +72,7 @@ class Runtime:
     def setup(self):
         if platform.system() != "Linux":
             raise RuntimeError("The owned runtime requires Linux; use Kaggle for live acceptance")
+        self.split_cpus()
         for port in (self.app_port, self.pg_port, 1025, 8025):
             self.free_port(port)  # Never re-use another person's service.
         if self.config["runtime"].get("pg_bin"):
@@ -144,7 +159,7 @@ class Runtime:
     def start_mail(self):
         with open(self.logs / "mailpit.log", "ab") as log:
             self.mail = subprocess.Popen([str(self.mail_binary), "--listen", "127.0.0.1:8025",
-                                           "--smtp", "127.0.0.1:1025"], stdout=log, stderr=log)
+                                           "--smtp", "127.0.0.1:1025"], stdout=log, stderr=log, **self.server_side())
         self.wait_http("http://127.0.0.1:8025/api/v1/messages", self.mail)
 
     def app_env(self):
@@ -152,7 +167,8 @@ class Runtime:
         prefixes = ("SPRING_", "SERVER_", "DB_", "TEST_DB_", "JWT_", "EMAIL_", "OTP_", "SMTP_", "AUTH_",
                     "BOOTSTRAP_", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS")
         env = {k: v for k, v in os.environ.items() if not k.startswith(prefixes)}
-        env.update(SPRING_PROFILES_ACTIVE="dev", SERVER_PORT=str(self.app_port),
+        # The dev profile also loads db/seed demo data; keep only the schema so fixtures stay the whole dataset.
+        env.update(SPRING_PROFILES_ACTIVE="dev", SPRING_FLYWAY_LOCATIONS="classpath:db/migration", SERVER_PORT=str(self.app_port),
                    DB_URL=f"jdbc:postgresql://127.0.0.1:{self.pg_port}/{self.db}",
                    DB_USERNAME=self.role, DB_PASSWORD=self.password,
                    JWT_SECRET=self.secret, EMAIL_OTP_SECRET=self.otp_secret,
@@ -163,7 +179,8 @@ class Runtime:
     def start_app(self):
         with open(self.logs / "backend.log", "ab") as log:
             self.app = subprocess.Popen([str(self.jdk / "bin/java"), *self.config["runtime"]["jvm_args"],
-                                         "-jar", str(self.jar)], env=self.app_env(), stdout=log, stderr=log)
+                                         "-jar", str(self.jar)], env=self.app_env(), stdout=log, stderr=log,
+                                         **self.server_side())
         self.wait_http(self.url + "/api/trips", self.app)
 
     def wait_http(self, url, proc):
@@ -226,7 +243,10 @@ class Runtime:
                     "packages": {n: version(n) for n in ("locust", "psutil", "psycopg", "requests", "PyYAML", "bcrypt")},
                     "dependency_inventory": {d.metadata["Name"]: d.version for d in distributions()},
                     "cpu": effective_cpus(), "cgroup": cgroup_snapshot(), "platform": platform.platform(), "postgres": settings,
-                    "migrations": migrations, "topology": "Java, PostgreSQL and generator colocated; backend-only capacity unproven",
+                    "migrations": migrations,
+                    "cpu_split": {"server": sorted(self.server_cpus), "generator": sorted(os.sched_getaffinity(0))} if self.server_cpus else None,
+                    "topology": ("Java/PostgreSQL/Mailpit and generator on one host, pinned to disjoint CPUs; memory, disk and caches stay shared"
+                                 if self.server_cpus else "Java, PostgreSQL and generator colocated; backend-only capacity unproven"),
                     "secret_policy": "ephemeral credentials; performance JWTs minted with current HS256 sub/iss/iat/exp contract; HTTP login tested separately"}
         save(self.root / "environment.json", manifest)
 

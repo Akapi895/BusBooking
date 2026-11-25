@@ -76,6 +76,9 @@ def classify(stats, load, oracle=None):
         return "OVERLOAD"
     if stats["unexpected_errors"] / stats["requests"] > load["max_unexpected_error_ratio"]:
         return "SLO_BREACH"
+    # Open model only: arrivals that started late mean the offered rate was not served.
+    if stats.get("missed_arrivals", 0) > stats.get("started", 0) * load["max_unexpected_error_ratio"]:
+        return "SLO_BREACH"
     for family in ("read", "write"):
         p95 = stats.get(family + "_p95_ms")
         if p95 is not None and p95 > load["slo_" + family + "_p95_ms"]:

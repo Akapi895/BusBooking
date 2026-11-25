@@ -12,7 +12,7 @@ import zipfile
 import requests
 
 from .common import append, jwt, save
-from .contracts import ENDPOINTS, booking_valid, canonical, verification_code
+from .contracts import ENDPOINTS, booking_valid, canonical, reset_code, verification_code
 
 
 class Acceptance:
@@ -95,7 +95,7 @@ class Acceptance:
             values = [future.result(timeout=60) for future in futures]
         return values, (max(starts) - min(starts)) * 1000
 
-    def otp(self, email, timeout=20):
+    def otp(self, email, timeout=20, find=verification_code):
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             try:
@@ -105,7 +105,7 @@ class Acceptance:
                     if any(address.get("Address") == email for address in message.get("To", [])):
                         response = requests.get("http://127.0.0.1:8025/api/v1/message/" + message["ID"], timeout=3)
                         response.raise_for_status()
-                        code = verification_code(response.json().get("Text", ""))
+                        code = find(response.json().get("Text", ""))
                         if code:
                             return code
             except requests.RequestException:
@@ -129,7 +129,26 @@ class Acceptance:
         me = requests.get(self.rt.url + "/api/auth/me", headers={"Authorization": "Bearer " + login["token"]}, timeout=10)
         assert me.status_code == 200 and me.json()["email"] == email
         self.request("POST", "/api/auth/resend-verification", None, {"email": email}, 202)
-        return {"registration_otp_login": True, "one_time_code": True}
+
+        # Changing or resetting the password and logging out each revoke every earlier token.
+        changed = "Changed" + self.fx.password
+        password = {"currentPassword": self.fx.password + "x", "newPassword": changed}
+        self.request("PUT", "/api/users/me/password", None, password, 400, raw_token=login["token"])
+        password["currentPassword"] = self.fx.password
+        self.request("PUT", "/api/users/me/password", None, password, 204, raw_token=login["token"])
+        self.request("GET", "/api/auth/me", None, expected=401, raw_token=login["token"])
+        self.request("POST", "/api/auth/login", None, {"email": email, "password": self.fx.password}, 401)
+        _, login = self.request("POST", "/api/auth/login", None, {"email": email, "password": changed}, 200)
+        self.request("POST", "/api/auth/logout", None, expected=204, raw_token=login["token"])
+        self.request("GET", "/api/auth/me", None, expected=401, raw_token=login["token"])
+        self.request("POST", "/api/auth/forgot-password", None, {"email": email}, 202)
+        code = self.otp(email, find=reset_code)
+        reset = "Reset" + self.fx.password
+        self.request("POST", "/api/auth/reset-password", None, {"email": email, "code": code, "newPassword": reset}, 204)
+        self.request("POST", "/api/auth/reset-password", None, {"email": email, "code": code, "newPassword": changed}, 400)
+        self.request("POST", "/api/auth/login", None, {"email": email, "password": reset}, 200)
+        return {"registration_otp_login": True, "one_time_code": True,
+                "password_change_logout_reset_revoke_tokens": True}
 
     def catalog(self):
         suffix = secrets.token_hex(4)
@@ -169,13 +188,25 @@ class Acceptance:
         _, history = self.request("GET", "/api/users/me/bookings", expected=200)
         assert any(b["id"] == booking["id"] for b in history)
         self.request("GET", "/api/admin/bookings?tripId=" + str(trip["id"]), "ADMIN", expected=200)
-        self.request("DELETE", f"/api/admin/trips/{trip['id']}", "ADMIN", expected=409)
         self.request("DELETE", f"/api/bookings/{booking['id']}", expected=200)
-        self.request("DELETE", f"/api/bookings/{booking['id']}", expected=400)
+        _, again = self.request("DELETE", f"/api/bookings/{booking['id']}", expected=200)
+        assert again["status"] == "CANCELLED" and self.counts(trip["id"])[0] == 40
+        # Cancelling a trip with a confirmed booking queues a refund and a notice email.
+        _, booked = self.book(trip["id"], quantity=1, expected=201)
+        self.request("DELETE", f"/api/admin/trips/{trip['id']}", "ADMIN", expected=200)
+        self.request("DELETE", f"/api/admin/trips/{trip['id']}", "ADMIN", expected=200)
         assert self.counts(trip["id"])[0] == 40
-        self.request("DELETE", f"/api/admin/trips/{trip['id']}", "ADMIN", expected=200)
-        self.request("DELETE", f"/api/admin/trips/{trip['id']}", "ADMIN", expected=200)
-        return {"crud": resources, "lifecycle": True}
+        self.request("DELETE", f"/api/bookings/{booked['id']}", expected=400)
+        _, pending = self.request("GET", f"/api/admin/bookings?status=REFUND_PENDING&tripId={trip['id']}", "ADMIN", expected=200)
+        assert [b["id"] for b in pending] == [booked["id"]], pending
+        self.otp(self.fx.data["principals"]["USER"]["email"],
+                 find=lambda text: booked["bookingCode"] if booked["bookingCode"] in text else None)
+        refund = f"/api/admin/bookings/{booked['id']}/refund"
+        self.request("POST", refund, "USER", expected=403)
+        _, refunded = self.request("POST", refund, "ADMIN", expected=200)
+        assert refunded["status"] == "REFUNDED"
+        self.request("POST", refund, "ADMIN", expected=400)
+        return {"crud": resources, "lifecycle": True, "trip_cancel_refund": True}
 
     def security(self):
         self.request("GET", "/api/auth/me", expected=200)
@@ -255,7 +286,8 @@ class Acceptance:
             trip, _ = self.fx.new_trip(2)
             _, booking = self.book(trip, expected=201)
             values, spread = self.burst([lambda: self.request("DELETE", f"/api/bookings/{booking['id']}") for _ in range(10)])
-            assert Counter(v[0] for v in values) == {200: 1, 400: 9}
+            # Repeated cancels are idempotent (200); the seat must still come back only once.
+            assert Counter(v[0] for v in values) == {200: 10}
             assert self.counts(trip)[:3] == (2, 1, 0)
             _, old = self.book(trip, quantity=2, expected=201)
             values, _ = self.burst([lambda: self.book(trip, self.fx.data["users"][0]),
@@ -272,9 +304,10 @@ class Acceptance:
             values, spread = self.burst([lambda: self.book(trip),
                 lambda: self.request("DELETE", f"/api/admin/trips/{trip}", "ADMIN")])
             codes = tuple(v[0] for v in values)
-            assert codes in ((201, 409), (400, 200)), codes
+            # The cancel always wins; a booking that got in first is moved to REFUND_PENDING.
+            assert codes in ((201, 200), (400, 200)), codes
             left, count, confirmed, status = self.counts(trip)
-            assert (status == "SCHEDULED" and confirmed == 1 and left == 1) or (status == "CANCELLED" and count == 0 and left == 2)
+            assert status == "CANCELLED" and left == 2 and confirmed == 0 and count == (codes[0] == 201), (left, count, confirmed, status)
             trip, _ = self.fx.new_trip(2)
             small = self.fx.new_vehicle(1)
             _, current = self.request("GET", f"/api/trips/{trip}", None, expected=200)

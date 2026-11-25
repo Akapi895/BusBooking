@@ -158,4 +158,6 @@ def validate_config(config):
         raise ValueError("Need distinct fixture accounts for the largest concurrency burst")
     if not 0 <= load["max_unexpected_error_ratio"] <= 1:
         raise ValueError("Invalid error ratio")
+    if load["open_pacing_seconds"] <= 0 or load["max_rsd_pct"] <= 0 or not all(x > 0 for x in load["open_rate_fractions"]):
+        raise ValueError("Open-model pacing, rate fractions and max_rsd_pct must be positive")
     return config

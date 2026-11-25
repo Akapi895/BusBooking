@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from bbtest.adaptive import Search, classify
 from bbtest.common import histogram_percentile, jwt, validate_config, slot_permutation, slot_trip_index
-from bbtest.contracts import ENDPOINTS, booking_valid, canonical, verification_code
+from bbtest.contracts import ENDPOINTS, booking_valid, canonical, reset_code, verification_code
 from bbtest.report import archive, build
 from bbtest.runner import aggregate, Runner
 from bbtest.common import save
@@ -135,8 +135,9 @@ class ContractTest(unittest.TestCase):
             with self.assertRaises(IndexError):
                 slot_trip_index(trips * capacity, trips, capacity, permutation)
 
-    def test_32_endpoints_and_canonical_ids(self):
-        self.assertEqual(len(ENDPOINTS), 32)
+    def test_37_endpoints_and_canonical_ids(self):
+        self.assertEqual(len(ENDPOINTS), 37)
+        self.assertIn(("POST", canonical("/api/admin/bookings/7/refund")), ENDPOINTS)
         self.assertEqual(canonical("/api/admin/users/123/role?x=1"), "/api/admin/users/{id}/role")
 
     def test_actual_booking_dto_has_no_user_id(self):
@@ -144,6 +145,25 @@ class ContractTest(unittest.TestCase):
         self.assertTrue(booking_valid(body, 99, 2, 3, "0.10"))
         body["totalAmount"] = "0.31"
         self.assertFalse(booking_valid(body, 99, 2, 3))
+
+    def test_spread_reports_median_and_relative_deviation(self):
+        from bbtest.runner import spread
+        result = spread([90.0, 100.0, 110.0, None])
+        self.assertEqual((result["n"], result["median"], result["min"], result["max"]), (3, 100.0, 90.0, 110.0))
+        self.assertAlmostEqual(result["rsd_pct"], 10.0)
+        self.assertIsNone(spread([5.0])["rsd_pct"])
+        self.assertIsNone(spread([None]))
+
+    def test_late_open_model_arrivals_breach_the_slo(self):
+        from bbtest.adaptive import classify
+        load = {"max_unexpected_error_ratio": 0.001, "slo_read_p95_ms": 300, "slo_write_p95_ms": 500}
+        stats = {"complete": True, "requests": 1000, "started": 1000, "unexpected_errors": 0, "write_p95_ms": 50}
+        self.assertEqual(classify(dict(stats, missed_arrivals=1), load), "PASS")
+        self.assertEqual(classify(dict(stats, missed_arrivals=2), load), "SLO_BREACH")
+
+    def test_reset_code_reads_only_the_reset_email(self):
+        self.assertEqual(reset_code("Mã đặt lại mật khẩu của bạn: 654321\nMã có hiệu lực trong 10 phút"), "654321")
+        self.assertIsNone(reset_code("Mã xác minh email của bạn: 012345"))
 
     def test_otp_ignores_six_digit_timestamp_fraction(self):
         self.assertEqual(verification_code("Mã xác minh email của bạn: 012345\nĐến 2026-11-15T12:00:00.123456Z (UTC)."), "012345")

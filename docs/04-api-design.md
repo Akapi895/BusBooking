@@ -165,7 +165,7 @@ Idempotency-Key: 90cc8547268d49aa8e40df82d39157a3
 
 Tạo thành công trả `201 Created` với booking `CONFIRMED`. Tên hành khách sau chuẩn hóa dài 1–100 ký tự, điện thoại theo định dạng Việt Nam và số vé là số nguyên dương.
 
-`Idempotency-Key` là header tùy chọn, dài 1–128 ký tự ASCII hiển thị và có hiệu lực 24 giờ theo từng tài khoản. Khi thử lại cùng nội dung đã chuẩn hóa, API trả `201` với dữ liệu đặt vé ban đầu, kể cả khi vé đã được hủy sau đó. Dùng lại cùng key với nội dung khác trả `409 IDEMPOTENCY_CONFLICT`. Khi nhận `503 SERVICE_UNAVAILABLE` do quá tải hoặc DB tạm thời không sẵn sàng, đợi theo `Retry-After` rồi thử lại với cùng key.
+`Idempotency-Key` là header tùy chọn, dài 1–128 ký tự ASCII hiển thị và có hiệu lực 24 giờ theo từng tài khoản. Khi thử lại cùng nội dung đã chuẩn hóa, API trả `201` với vé đã tạo ban đầu, kèm trạng thái hiện tại của vé (ví dụ `CANCELLED` nếu vé đã bị hủy sau đó). Dùng lại cùng key với nội dung khác trả `409 IDEMPOTENCY_CONFLICT`. Khi nhận `503 SERVICE_UNAVAILABLE` do quá tải hoặc DB tạm thời không sẵn sàng, đợi theo `Retry-After` rồi thử lại với cùng key.
 
 Khi tạo booking, PostgreSQL giảm ghế và trả giá bằng một `UPDATE … RETURNING` có điều kiện. Giữ ghế và lưu booking cùng transaction. Khi hủy, hệ thống khóa booking rồi khóa chuyến để kiểm tra sức chứa và hoàn ghế. Hết ghế trả `409 INSUFFICIENT_SEATS`. Chuyến không nhận đặt hoặc không thể hoàn ghế trả `400 BUSINESS_ERROR`. Gửi lại yêu cầu hủy cho vé đã hủy trả `200` với trạng thái `CANCELLED` cho người có quyền truy cập vé. Ghế chỉ được hoàn một lần.
 

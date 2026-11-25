@@ -5,7 +5,7 @@ from pathlib import Path
 import zipfile
 
 from .common import save, read_journal
-from .contracts import REQUIRED_CASES
+from .contracts import ENDPOINTS, REQUIRED_CASES
 from .adaptive import classify
 from .bottlenecks import inspect_stage
 
@@ -22,6 +22,7 @@ def build(root):
     coverage = read("endpoint-coverage.json", {"status": "UNKNOWN"})
     fatal = read("fatal.json", None)
     endurance = read("endurance.json", {"status": "UNKNOWN"})
+    open_model = read("open-model.json", {"status": "UNKNOWN"})
     missing_cases = sorted(REQUIRED_CASES - {c["name"] for c in cases})
     functional_ok = not missing_cases and all(c["status"] == "PASS" for c in cases)
     capacity_ok = bool(searches) and all(s.get("confirmed") for s in searches.values())
@@ -56,8 +57,8 @@ def build(root):
                 and architecture["status"] == "PASS"
                 and {c["name"] for c in cases} == {"functional.auth", "functional.catalog_and_booking"}
                 and all(c["status"] == "PASS" for c in cases)
-                and len(stages) == 3 and {s["workload"] for s in stages} == {"read", "write", "mixed"}
-                and all(s["status"] == "PASS" and s["vu"] == 1 and s.get("stats", {}).get("complete") for s in stages))
+                and len(stages) == 4 and {s["workload"] for s in stages} == {"read", "write", "mixed", "open-write"}
+                and all(s["status"] == "PASS" and s.get("stats", {}).get("complete") for s in stages))
     overall = "SMOKE_PASS" if smoke_ok else ("PASS_WITH_DECLARED_LIMITATIONS" if overall_ok else "FAIL_OR_INCOMPLETE")
     evidence = {"functional_status": "SMOKE_ONLY" if smoke_mode else ("PASS" if functional_ok else "FAIL_OR_INCOMPLETE"),
                 "missing_cases": missing_cases,
@@ -69,10 +70,9 @@ def build(root):
                 "invalid_recovery_rows": invalid_recovery, "cleanup_status": cleanup["status"],
                 "architecture_status": architecture["status"], "endpoint_coverage": coverage,
                 "capacity_status": "NOT_MEASURED" if smoke_mode else ("CONFIRMED_COLOCATED_ONLY" if capacity_ok else "UNCONFIRMED"),
-                "fatal": fatal, "searches": searches,
-                "known_gaps": ["No current idempotency key: timeout + retry may create two bookings",
-                    "Colocated generator/DB/Java cannot establish backend-only maximum capacity",
-                    "Closed-loop VU model does not independently control offered arrival rate",
+                "fatal": fatal, "searches": searches, "open_model": open_model,
+                "known_gaps": ["One host: CPUs are split between backend and generator, but memory, disk and caches stay shared",
+                    "Capacity search uses the closed-loop VU model; only the write open-model trials control the arrival rate",
                     "Pool occupancy unavailable unless independently exposed; no guessed pool size",
                     "JAR boundary scan does not prove every architectural property"]}
     save(root / "summary.json", evidence)
@@ -96,11 +96,37 @@ def build(root):
         lines[4:4] = ["**Smoke only:** checks startup, auth/business flow, one-VU load, data oracle and output export.",
                        "Full architecture/capacity/concurrency/fault/endurance acceptance was not requested.", ""]
     lines.extend(f"| {c['name']} | {c['status']} | {c.get('seconds', 0):.2f} |" for c in cases)
-    lines += ["", f"Endpoint surface: {coverage.get('covered', 0)}/{coverage.get('expected', 32)} positive method/path observations.",
+    lines += ["", f"Endpoint surface: {coverage.get('covered', 0)}/{coverage.get('expected', len(ENDPOINTS))} positive method/path observations.",
               f"JAR boundary check: {architecture['status']}.", "", "## Capacity brackets", "",
               "| Workload | Observed passing VU | Observed failing VU | Repeat-confirmed | Search stop |", "|---|---:|---:|---|---|"]
     for name, result in searches.items():
         lines.append(f"| {name} | {result.get('low_observed')} | {result.get('high_observed')} | {result.get('confirmed')} | {result['stop_reason']} |")
+    lines += ["", "## Repeat variability", "",
+              "Median and relative standard deviation (RSD) across confirmation repeats. RSD above "
+              f"{config.get('load', {}).get('max_rsd_pct', '?')}% marks the level unstable.", "",
+              "| Workload | VU | Successful RPS median | RPS RSD % | Read p95 median | Write p95 median | Stable |",
+              "|---|---:|---:|---:|---:|---:|---|"]
+    for name, result in searches.items():
+        for level, metrics in (result.get("variability") or {}).items():
+            def cell(metric, key):
+                value = (metrics.get(metric) or {}).get(key)
+                return "-" if value is None else f"{value:.1f}"
+            stable = result.get("stable") if str(result.get("low_observed")) == level else ""
+            lines.append(f"| {name} | {level} | {cell('successful_rps', 'median')} | {cell('successful_rps', 'rsd_pct')} | "
+                         f"{cell('read_p95_ms', 'median')} | {cell('write_p95_ms', 'median')} | {stable} |")
+    lines += ["", "## Open model (fixed arrival rate, booking)", ""]
+    if open_model.get("levels"):
+        lines += [f"Rates are fractions of the confirmed closed-loop write throughput "
+                  f"({open_model['base_closed_successful_rps']:.1f} req/s). {open_model['scope']}.", "",
+                  "| Fraction | Target req/s | Offered req/s | Successful req/s | p95 ms | p99 ms | Late arrivals | Result |",
+                  "|---:|---:|---:|---:|---:|---:|---:|---|"]
+        for level in open_model["levels"]:
+            values = [level.get(k) for k in ("offered_rps", "successful_rps", "write_p95_ms", "write_p99_ms")]
+            text = ["-" if v is None else f"{v:.1f}" for v in values]
+            lines.append(f"| {level['fraction']:g} | {level['target_rps']:.1f} | {' | '.join(text)} | "
+                         f"{level.get('missed_arrivals')} | {level['status']} |")
+    else:
+        lines.append(f"Not measured: {open_model.get('reason', 'no open-model trials ran')}.")
     lines += ["", "## Interpreting bottlenecks", "",
               "Inspect each stage's resources.jsonl, worker history, latency histograms and separate diagnostic replay.",
               "DB Lock waits + blocked sessions support a contention hypothesis; Java CPU/JFR support a CPU/GC hypothesis.",

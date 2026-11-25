@@ -38,6 +38,11 @@ load:
   generator_max_lag_fraction: 0.05
   abort_error_ratio: 0.20
   abort_error_windows: 3
+  # Repeat confirmations whose throughput RSD exceeds this are reported as unstable.
+  max_rsd_pct: 10
+  # Open model: each VU fires once per pacing period; rates are fractions of the confirmed write throughput.
+  open_pacing_seconds: 2
+  open_rate_fractions: [0.5, 0.8, 1.0, 1.2]
 concurrency:
   bursts: [2, 10, 50, 100]
   rounds: 100
@@ -52,3 +57,5 @@ runtime:
   startup_timeout: 180
   enable_faults: true
   enable_jfr_diagnostic: true
+  # Pin Java/PostgreSQL/Mailpit and the generator to disjoint CPU halves (Linux only).
+  cpu_split: true

@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 import secrets
+import statistics
 import subprocess
 import sys
 import time
@@ -14,8 +15,17 @@ from .common import append, effective_cpus, histogram_percentile, save
 from .telemetry import Collector, diagnostic
 
 
+def spread(values):
+    values = [v for v in values if v is not None]
+    if not values:
+        return None
+    mean = statistics.fmean(values)
+    return {"n": len(values), "median": statistics.median(values), "min": min(values), "max": max(values),
+            "rsd_pct": statistics.stdev(values) / mean * 100 if len(values) > 1 and mean else None}
+
+
 def aggregate(workers, seconds, load, phase_name="measure"):
-    result = {"requests": 0, "unexpected_errors": 0, "assertions": 0, "expected_rejections": 0,
+    result = {"requests": 0, "unexpected_errors": 0, "assertions": 0, "expected_rejections": 0, "missed_arrivals": 0,
               "completions_in_window": 0, "started": 0, "bytes": 0, "acknowledged": 0,
               "successful_in_window": 0, "rejected_in_window": 0,
               "complete": bool(workers) and all(w.get("complete") for w in workers),
@@ -24,7 +34,7 @@ def aggregate(workers, seconds, load, phase_name="measure"):
     histograms = {"read": Counter(), "write": Counter()}
     for worker in workers:
         phase = worker.get("phases", {}).get(phase_name, {})
-        for key in ("requests", "unexpected_errors", "assertions", "expected_rejections", "completions_in_window", "started", "bytes", "successful_in_window", "rejected_in_window"):
+        for key in ("requests", "unexpected_errors", "assertions", "expected_rejections", "missed_arrivals", "completions_in_window", "started", "bytes", "successful_in_window", "rejected_in_window"):
             result[key] += phase.get(key, 0)
         result["all_phase_assertions"] = result.get("all_phase_assertions", 0) + sum(
             worker.get("phases", {}).get(key, {}).get("assertions", 0) for key in ("ramp", "warmup", "measure"))
@@ -106,7 +116,7 @@ class Runner:
                 oracle["reason"] = "Acknowledgement journal incomplete"
         return oracle
 
-    def stage(self, workload, vu, seconds=None, label="discovery", profiled=False, sequence=None, worker_override=None):
+    def stage(self, workload, vu, seconds=None, label="discovery", profiled=False, sequence=None, worker_override=None, pacing=None):
         seconds = seconds or self.load["measure_seconds"]
         max_vu = max([vu] + [step["vu"] for step in sequence or []])
         if max_vu > len(self.fx.data["users"]):
@@ -133,7 +143,7 @@ class Runner:
                 target = vu // workers + (index < vu % workers)
                 settings = {"fixture_path": str(self.rt.root / "fixture.json"), "load": self.load,
                     "directory": str(directory), "worker_index": index, "workers": workers, "vu": target,
-                    "workload": workload, "seed": self.rt.config["seed"], "marker": marker}
+                    "workload": workload, "seed": self.rt.config["seed"], "marker": marker, "pacing": pacing}
                 path = directory / f"settings-{index}.json"
                 save(path, settings)
                 env = os.environ.copy()
@@ -241,7 +251,8 @@ class Runner:
                   "stats": stats, "oracle": oracle, "schedule": schedule, "directory": directory.name,
                   "stop_reason": reason, "profiled": profiled, "profiling": profiling,
                   "segments": segments,
-                  "model": "closed-loop fixed think time; not independently offered arrival rate"}
+                  "model": (f"open: one arrival every {pacing}s per VU, target {vu / pacing:.1f} req/s; late starts counted"
+                            if pacing else "closed-loop fixed think time; not independently offered arrival rate")}
         save(directory / "result.json", result)
         self.stages.append(result)
         save(self.rt.root / "stages.json", self.stages)
@@ -288,7 +299,10 @@ class Runner:
                     if time.monotonic() >= deadline:
                         break
                     result = self.stage(workload, target, self.load["confirm_seconds"], "confirm")
-                    confirmations.append({"vu": target, "status": result["status"], "repeat": repeat})
+                    stats = result.get("stats", {})
+                    confirmations.append({"vu": target, "status": result["status"], "repeat": repeat,
+                                          "successful_rps": stats.get("successful_rps"),
+                                          "read_p95_ms": stats.get("read_p95_ms"), "write_p95_ms": stats.get("write_p95_ms")})
                     if result["status"] in INVALID or result["status"] == "CORRECTNESS_FAILURE":
                         break
             stable_low = [c for c in confirmations if c["vu"] == policy.low]
@@ -299,7 +313,14 @@ class Runner:
                          and not policy.contradictions)
         else:
             confirmed = False
+        variability = {str(level): {metric: spread([c[metric] for c in confirmations if c["vu"] == level])
+                                    for metric in ("successful_rps", "read_p95_ms", "write_p95_ms")}
+                       for level in (policy.low, policy.high) if level is not None}
+        throughput = (variability.get(str(policy.low)) or {}).get("successful_rps") or {}
         summary = {"low_observed": policy.low, "high_observed": policy.high, "confirmed": confirmed,
+                   "variability": variability,
+                   # Repeats beyond this relative spread are reported as unstable, not averaged into one number.
+                   "stable": throughput.get("rsd_pct") is not None and throughput["rsd_pct"] <= self.load["max_rsd_pct"],
                    "stop_reason": policy.stopped, "history": policy.history, "confirmations": confirmations,
                    "non_monotonic_observations": policy.contradictions,
                    "capacity_authority": "colocated environment only"}
@@ -309,6 +330,29 @@ class Runner:
         if policy.high and self.rt.config["runtime"]["enable_jfr_diagnostic"] and self.remaining() > 400:
             self.stage(workload, policy.high, 60, "diagnostic", profiled=True)
         return summary
+
+    def open_model(self):
+        """Fixed arrival rates around the confirmed closed-loop write throughput (k6 constant-arrival-rate style)."""
+        search = self.searches.get("write", {})
+        rates = [c["successful_rps"] for c in search.get("confirmations", [])
+                 if c["vu"] == search.get("low_observed") and c["status"] == "PASS" and c["successful_rps"]]
+        if not search.get("confirmed") or not rates:
+            result = {"status": "UNKNOWN", "reason": "No repeat-confirmed write level to anchor the arrival rates"}
+            save(self.rt.root / "open-model.json", result)
+            return result
+        base, pacing, levels = statistics.median(rates), self.load["open_pacing_seconds"], []
+        for fraction in self.load["open_rate_fractions"]:
+            vu = max(1, math.ceil(base * fraction * pacing))
+            stage = self.stage("open-write", vu, self.load["confirm_seconds"], f"open-{fraction:g}", pacing=pacing)
+            stats = stage.get("stats", {})
+            levels.append({"fraction": fraction, "target_rps": vu / pacing, "status": stage["status"],
+                           "offered_rps": stats.get("start_rps"), "successful_rps": stats.get("successful_rps"),
+                           "write_p95_ms": stats.get("write_p95_ms"), "write_p99_ms": stats.get("write_p99_ms"),
+                           "missed_arrivals": stats.get("missed_arrivals"), "error_ratio": stats.get("error_ratio")})
+        result = {"base_closed_successful_rps": base, "pacing_seconds": pacing, "levels": levels,
+                  "scope": "A PASS level had no late arrival, so its latency is free of coordinated omission"}
+        save(self.rt.root / "open-model.json", result)
+        return result
 
     def recovery_probe(self, workload):
         """No restart/restore between overload and recovery observation."""

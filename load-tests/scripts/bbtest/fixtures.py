@@ -93,6 +93,9 @@ class Fixtures:
                 "WHERE t.available_seats<0 OR t.available_seats>v.seat_capacity "
                 "OR t.available_seats+coalesce(s.qty,0)<>v.seat_capacity").fetchone()[0]
             bad_money = conn.execute("SELECT count(*) FROM bookings WHERE total_amount<>unit_price*quantity").fetchone()[0]
+            # A cancelled trip moves its confirmed bookings to REFUND_PENDING in the same transaction.
+            inconsistent += conn.execute("SELECT count(*) FROM bookings b JOIN trips t ON t.id=b.trip_id "
+                "WHERE t.status='CANCELLED' AND b.status='CONFIRMED'").fetchone()[0]
             committed = conn.execute("SELECT count(*) FROM bookings WHERE passenger_name LIKE %s", (marker + "%",)).fetchone()[0] if marker else None
             counts = {name: conn.execute("SELECT count(*) FROM " + name).fetchone()[0]
                       for name in ("users", "trips", "bookings")}

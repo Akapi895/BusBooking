@@ -56,6 +56,9 @@ def main():
                 build(rt.root)
                 archive(rt.root)
             runner.endurance()
+            # Optional evidence: runs last so it can never take the soak's budget.
+            build(rt.root)
+            runner.open_model()
     except BaseException as error:
         code = 2
         save(rt.root / "fatal.json", {"type": type(error).__name__, "phase": "run",

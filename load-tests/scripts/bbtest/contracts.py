@@ -3,15 +3,15 @@ ENDPOINTS = {
     ("GET", "/api/locations"), ("GET", "/api/trips"), ("GET", "/api/trips/{id}"),
     ("POST", "/api/bookings"), ("GET", "/api/bookings/{id}"), ("DELETE", "/api/bookings/{id}"),
     ("GET", "/api/users/me/bookings"), ("GET", "/api/users/me"), ("PUT", "/api/users/me"),
-    ("GET", "/api/auth/me"),
+    ("GET", "/api/auth/me"), ("PUT", "/api/users/me/password"),
     *(("POST", "/api/auth/" + action) for action in
-      ("register", "login", "verify-email", "resend-verification")),
+      ("register", "login", "verify-email", "resend-verification", "forgot-password", "reset-password", "logout")),
     *((method, "/api/admin/" + resource + suffix)
       for resource in ("operators", "locations", "vehicles", "routes")
       for method, suffix in (("GET", ""), ("POST", ""), ("PUT", "/{id}"))),
     *((method, "/api/admin/trips" + suffix)
       for method, suffix in (("GET", ""), ("POST", ""), ("PUT", "/{id}"), ("DELETE", "/{id}"))),
-    ("GET", "/api/admin/bookings"), ("PUT", "/api/admin/users/{id}/role"),
+    ("GET", "/api/admin/bookings"), ("POST", "/api/admin/bookings/{id}/refund"), ("PUT", "/api/admin/users/{id}/role"),
 }
 
 REQUIRED_CASES = {
@@ -33,6 +33,12 @@ def verification_code(text):
     import re
     # Match the actual SMTP message's code line, not six-digit Instant fractions.
     match = re.search(r"^Mã xác minh email của bạn:\s*([0-9]{6})\s*$", text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def reset_code(text):
+    import re
+    match = re.search(r"^Mã đặt lại mật khẩu của bạn:\s*([0-9]{6})\s*$", text, re.MULTILINE)
     return match.group(1) if match else None
 
 

@@ -26,7 +26,7 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(full["profile"], "acceptance")
         self.assertEqual(full["concurrency"]["rounds"], 100)
 
-    def test_smoke_uses_two_cases_then_three_single_vu_trials(self):
+    def test_smoke_uses_two_cases_then_three_closed_trials_and_one_open_trial(self):
         validation = Path(os.environ.get("BB_VALIDATION_DIR", ROOT / ".validation"))
         validation.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=validation) as temp:
@@ -38,10 +38,14 @@ class SmokeTest(unittest.TestCase):
                 result = run(rt, None, ROOT / "scripts")
                 self.assertEqual(result["status"], "PASS")
                 self.assertEqual(api.return_value.case.call_count, 2)
-                self.assertEqual(runner.return_value.stage.call_count, 3)
-                for call in runner.return_value.stage.call_args_list:
+                self.assertEqual(runner.return_value.stage.call_count, 4)
+                *closed, opened = runner.return_value.stage.call_args_list
+                for call in closed:
                     self.assertEqual(call.args[1], 1)
                     self.assertEqual(call.kwargs["worker_override"], 1)
+                    self.assertNotIn("pacing", call.kwargs)
+                self.assertEqual(opened.args[0], "open-write")
+                self.assertEqual(opened.kwargs["pacing"], 1)
                 runner.return_value.search.assert_not_called()
                 runner.return_value.endurance.assert_not_called()
 
@@ -56,7 +60,7 @@ class SmokeTest(unittest.TestCase):
                 for name in ("functional.auth", "functional.catalog_and_booking")])
             save(root / "smoke.json", {"status": "PASS"})
             stages = [{"workload": name, "vu": 1, "label": "smoke", "status": "PASS", "stats": {"complete": True}}
-                      for name in ("read", "write", "mixed")]
+                      for name in ("read", "write", "mixed", "open-write")]
             save(root / "stages.json", stages)
             result = build(root)
             self.assertEqual(result["overall_status"], "SMOKE_PASS")

@@ -9,7 +9,7 @@ import time
 from collections import Counter, defaultdict
 
 import gevent
-from locust import HttpUser, between, events, task
+from locust import HttpUser, events, task
 from locust.exception import StopUser
 import psutil
 
@@ -28,7 +28,7 @@ TRIPS = FIXTURE["trips"][INDEX::WORKERS]
 random.shuffle(TRIPS)
 SLOTS = itertools.count()
 PERMUTATION = slot_permutation(len(TRIPS) * FIXTURE["capacity"], SETTINGS["seed"] + INDEX)
-STATS = defaultdict(lambda: {"started": 0, "requests": 0, "unexpected_errors": 0, "assertions": 0,
+STATS = defaultdict(lambda: {"started": 0, "requests": 0, "unexpected_errors": 0, "assertions": 0, "missed_arrivals": 0,
                            "expected_rejections": 0, "completions_in_window": 0, "bytes": 0,
                            "successful_in_window": 0, "rejected_in_window": 0,
                            "status_codes": Counter(), "read": Counter(), "write": Counter(), "endpoints": {}})
@@ -127,10 +127,19 @@ def monitor(environment, **kwargs):
         process.cpu_percent()
         ready = False
         last_shape = None
+        stalls = [0.0]
+
+        def ticker():
+            # Any blocking call (including this monitor's own file writes) delays every user's timers.
+            while True:
+                before = time.monotonic()
+                gevent.sleep(0.05)
+                stalls[0] = max(stalls[0], (time.monotonic() - before - 0.05) * 1000)
+        gevent.spawn(ticker)
         while True:
-            started = time.monotonic()
             gevent.sleep(1)
-            LAGS.append(max(0, (time.monotonic() - started - 1) * 1000))
+            LAGS.append(stalls[0])
+            stalls[0] = 0.0
             CPU.append(process.cpu_percent())
             schedule_path = DIRECTORY / "schedule.json"
             if SCHEDULE is None and schedule_path.exists():
@@ -174,8 +183,17 @@ def finished(environment, **kwargs):
     dump(environment, final=True)
 
 
+PACING = SETTINGS.get("pacing")
+
+
 class AcceptanceUser(HttpUser):
-    wait_time = between(LOAD["think_min"], LOAD["think_max"])
+    def wait_time(self):
+        if not PACING:
+            return random.uniform(LOAD["think_min"], LOAD["think_max"])
+        # Open model: each VU owns a fixed slot every PACING seconds, independent of response time.
+        # Locust's constant_pacing anchors on spawn time, and users spawn in batches, which fired them in lockstep.
+        self.due += PACING
+        return max(0.0, self.due - time.monotonic())
 
     def on_start(self):
         global EXHAUSTED
@@ -187,6 +205,10 @@ class AcceptanceUser(HttpUser):
         self.token = jwt(self.uid, os.environ["BB_JWT_SECRET"])
         self.owned = []
         self.sequence = 0
+        if PACING:
+            # Random phase per VU so arrivals are spread across the period.
+            self.due = time.monotonic() + random.uniform(0, PACING)
+            gevent.sleep(self.due - time.monotonic())
 
     def call(self, method, path, family="read", body=None, authenticated=False, expected=200, validate=None, hot=False):
         phase = current_phase()
@@ -267,9 +289,16 @@ class AcceptanceUser(HttpUser):
             gevent.sleep(0.1)
             return
         workload = SETTINGS["workload"]
+        if PACING:
+            late = time.monotonic() - self.due
+            # A start later than its slot means the previous response outlived the pacing: the offered rate slipped.
+            if late > LOAD["generator_max_lag_ms"] / 1000:
+                STATS[current_phase()]["missed_arrivals"] += 1
+            if late > PACING:
+                self.due += late // PACING * PACING  # drop the slots already missed instead of firing a backlog
         if workload == "read":
             self.read()
-        elif workload == "write":
+        elif workload in ("write", "open-write"):
             self.write()
         elif workload == "hotspot":
             self.write(True)

@@ -14,10 +14,13 @@ def run(rt, fixtures, scripts):
     for workload in ("read", "write", "mixed"):
         trials.append(runner.stage(workload, 1, rt.config["load"]["measure_seconds"],
                                    label="smoke", worker_override=1))
+    # Open-model plumbing: two VUs, one booking per second each.
+    trials.append(runner.stage("open-write", 2, rt.config["load"]["measure_seconds"],
+                               label="smoke", worker_override=1, pacing=1))
     result = {"status": "PASS" if all(c["status"] == "PASS" for c in cases)
               and all(t["status"] == "PASS" for t in trials) else "FAIL_OR_INCOMPLETE",
               "cases": [{"name": c["name"], "status": c["status"]} for c in cases],
               "trials": [{"workload": t["workload"], "status": t["status"]} for t in trials],
-              "scope": "one VU, sequential auth/business/load/oracle/export plumbing; no capacity, concurrency, fault or endurance claim"}
+              "scope": "one VU per closed workload plus a 2 req/s open-model trial; plumbing only, no capacity, concurrency, fault or endurance claim"}
     save(rt.root / "smoke.json", result)
     return result

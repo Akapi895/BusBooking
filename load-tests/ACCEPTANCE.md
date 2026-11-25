@@ -26,7 +26,7 @@ Giữ `MODE = 'smoke'` và `OVERRIDES = {}` trong cell đầu rồi Run All. B�
 
 1. Khởi động PostgreSQL + Mailpit + JAR, seed chỉ **5 tài khoản performance và 100 chuyến**.
 2. Đăng ký → nhận OTP Mailpit → verify → login; CRUD catalog/chuyến → đặt vé → xem → hủy.
-3. Chạy lần lượt **read, write, mixed**, mỗi lượt **1 VU / 1 worker / 5 giây đo**, có warm-up ngắn và drain.
+3. Chạy lần lượt **read, write, mixed**, mỗi lượt **1 VU / 1 worker / 5 giây đo**, có warm-up ngắn và drain; sau đó một lượt **tải mở 2 req/s** để kiểm tra đường chạy open-model.
 4. Đối soát DB, dừng các dịch vụ thuộc lượt chạy và xuất REPORT/JSON/CSV/metrics/ZIP như đường chạy chính.
 
 Không chạy tìm ngưỡng, concurrency, fault injection, JFR hay soak trong smoke. Khi hoàn tất phải thấy **`SMOKE_PASS` và exit code 0**. Đây chỉ là xác nhận full flow của bộ kiểm thử chạy được, không phải nghiệm thu hiệu năng/kiến trúc. Lần đầu cài dependencies/tải JDK có thể chiếm phần lớn thời gian; các API và lượt tải của smoke là ngắn.
@@ -49,6 +49,7 @@ Cập nhật dataset bằng kit mới và import notebook mới trước khi ch�
 
 - Chỉ chạy **JAR được upload**, không biên dịch, sửa service/controller, tạo index, thay pool, bỏ khóa, tắt constraint hoặc đổi rate limit.
 - Tạo một **PostgreSQL cluster mới**, chỉ bind loopback, DB/user ngẫu nhiên. Không kết nối DB dev/test có sẵn. App dùng profile `dev`, heap `-Xms256m -Xmx1024m`, timezone UTC giống notebook lịch sử. Ghi nhận phiên bản Java/PostgreSQL và cấu hình DB thực tế; không mặc định chúng giống môi trường sản xuất.
+- **Tách CPU** (`runtime.cpu_split`, mặc định bật, chỉ Linux): Java, PostgreSQL và Mailpit được ghim vào nửa đầu số CPU; harness và mọi tiến trình Locust ở nửa còn lại. Như vậy máy phát tải không giành CPU của backend. RAM, đĩa và cache vẫn dùng chung. Phân chia thực tế được ghi trong `environment.json` (`cpu_split`).
 - Mailpit thuộc suite, bind `127.0.0.1:1025/8025`. Runtime cung cấp JWT secret, OTP HMAC secret và outbox secret độc lập cho JAR của mỗi lượt chạy.
 - Các biến Spring/DB/JWT/auth thừa kế được loại khỏi tiến trình app. Hai secret được tạo độc lập cho lượt chạy; không lưu secret/token vào báo cáo.
 - Tài khoản performance được seed SQL và dùng JWT fixture đúng HS256/sub/iss/iat/exp. JWT vẫn đi qua filter và DB role/active/verified như request thật. Luồng register → email OTP → verify → login được test qua HTTP riêng; không giả vờ rằng seed đã kiểm thử login.
@@ -61,7 +62,7 @@ Cập nhật dataset bằng kit mới và import notebook mới trước khi ch�
 |---|---|
 | Architecture | Đọc constant pool class trong JAR để phát hiện business tham chiếu API/data/security/notification/JPA/Servlet; không load target class |
 | Schema | Flyway migrate DB rỗng, checksum/version migration trong manifest, Hibernate validate khi app khởi động |
-| API | Quan sát thành công toàn bộ 32 method–path của controller hiện tại; CRUD catalog/trip, profile, auth, booking và đổi role |
+| API | Quan sát thành công toàn bộ 37 method–path của controller hiện tại; CRUD catalog/trip, profile, auth (đổi/đặt lại mật khẩu, logout), booking, hoàn tiền và đổi role |
 | Business | Lọc ngày/tuyến, dữ liệu rỗng/sai, giá × quantity, history, ownership, hủy booking/hủy chuyến đúng chính sách hiện tại |
 | Security | Thiếu token/sai role trên admin surface, USER-only booking/history, role đổi có hiệu lực với token cũ, inactive bị từ chối, profile không tự nâng role |
 | Rate limit | Giữ nguyên default: 10 login sai rồi request thứ 11 nhận 429; không tăng giới hạn để làm đẹp baseline |
@@ -74,9 +75,9 @@ Cập nhật dataset bằng kit mới và import notebook mới trước khi ch�
 | DB chậm/lock | Giữ root trip lock, phát 50 booking qua HTTP, quan sát nhiều DB waiters và hoàn tất sau release; không đoán kích thước/occupancy pool |
 | Performance | Read/write/mixed/hotspot, tìm thô → refine → probe cao hơn → xác nhận hai đầu tối thiểu 3 lần; diagnostic JFR riêng |
 | Endurance | Spike low→peak→low trong một tiến trình; kiểm tra target VU thực đạt; soak 1 giờ ở 65% mức low đã xác nhận |
-| Data | Ghế không âm/vượt capacity; ghế + vé CONFIRMED = capacity; tiền đúng; ID/owner của booking đã ACK tồn tại trong DB |
+| Data | Ghế không âm/vượt capacity; ghế + vé CONFIRMED = capacity; chuyến đã hủy không còn vé CONFIRMED; tiền đúng; ID/owner của booking đã ACK tồn tại trong DB |
 
-Hủy chuyến có vé CONFIRMED phải bị từ chối. Hủy booking lặp lại phải bị từ chối và chỉ hoàn ghế một lần. Yêu cầu gửi lại OTP trả **202** và xác minh thành công trả **204**. Khi kiểm thử hotspot, `409 INSUFFICIENT_SEATS` và `503 SERVICE_UNAVAILABLE` kèm `Retry-After` được đếm là từ chối dự kiến. Các workload thông thường vẫn tính `503` vào tỷ lệ lỗi.
+Hủy chuyến có vé CONFIRMED thành công: vé chuyển sang `REFUND_PENDING`, ghế được trả lại, khách nhận email và admin đánh dấu `REFUNDED`. Hủy booking lặp lại trả `200` và chỉ hoàn ghế một lần. Đổi mật khẩu, đặt lại mật khẩu và logout thu hồi mọi token cũ. Yêu cầu gửi lại OTP trả **202** và xác minh thành công trả **204**. Khi kiểm thử hotspot, `409 INSUFFICIENT_SEATS` và `503 SERVICE_UNAVAILABLE` kèm `Retry-After` được đếm là từ chối dự kiến. Các workload thông thường vẫn tính `503` vào tỷ lệ lỗi. Mỗi JVM chỉ xử lý tối đa 8 booking cùng lúc (`booking.max-in-flight-total`), nên ngưỡng `write`/`mixed` thường dừng ở giới hạn này: đó là kết quả cần báo cáo, không phải lỗi harness.
 
 ## 4. Tìm vùng chịu tải không có trần VU cố định
 
@@ -99,7 +100,19 @@ Chỉnh các tham số của **harness** trong `config/acceptance.yaml`, hoặc 
 - `mixed`: 65% nhánh đọc ở trên, 20% đặt, 10% history, 5% hủy booking của chính VU; nếu VU chưa có booking để hủy thì đọc. Báo cáo số request thực tế, không coi trọng số là tỷ lệ thực đo chính xác.
 - `hotspot`: worker cố ý dùng chung các trip; mỗi nhóm khoảng 100 lượt chuyển sang trip tiếp theo. Chỉ 409 `INSUFFICIENT_SEATS` là từ chối dự kiến. Báo cáo riêng throughput thành công và throughput từ chối, không gọi mọi request là vé bán được.
 
-**Mô hình tải:** Locust HttpUser là closed-loop; thời gian phản hồi tăng có thể làm RPS phát giảm. Suite ghi started/completed/success/rejection RPS và pending, không tuyên bố kiểm thử arrival-rate độc lập. Không thể suy ra số người dùng toàn hệ thống chỉ từ VU.
+**Mô hình tải:** việc tìm ngưỡng dùng mô hình đóng (closed-loop): mỗi VU chờ phản hồi rồi mới gửi tiếp, nên khi hệ thống chậm thì tải gửi vào cũng giảm. Hiện tượng này gọi là *coordinated omission*: độ trễ đo được trông tốt hơn thực tế. Không thể suy ra số người dùng toàn hệ thống chỉ từ VU.
+
+**Tải mở cho đặt vé** (`open-write`, chạy sau khi tìm ngưỡng xong), theo cách *constant-arrival-rate* của k6:
+
+- Mỗi VU giữ một lịch cố định: gửi đúng một booking mỗi `open_pacing_seconds` (mặc định 2 giây), pha ngẫu nhiên, không phụ thuộc thời gian phản hồi. Tốc độ mục tiêu = số VU / pacing.
+- Các mức tải = `open_rate_fractions` (0,5; 0,8; 1,0; 1,2) × throughput đặt vé thành công đã xác nhận lặp ở mô hình đóng. Không có mức xác nhận thì ghi UNKNOWN, không tự chọn.
+- Một lượt gửi bắt đầu trễ hơn lịch quá `generator_max_lag_ms` được đếm là **late arrival**: phản hồi trước đó đã vượt quá pacing nên tốc độ mục tiêu không được phục vụ. Late arrival vượt `max_unexpected_error_ratio` là `SLO_BREACH`. Vì vậy độ trễ của một mức PASS không bị coordinated omission.
+- Kết quả: `open-model.json` và bảng "Open model" trong REPORT (mục tiêu, tốc độ gửi thực, thành công, p95/p99, late arrivals).
+- Không dùng `constant_pacing` của Locust: nó tính nhịp từ lúc tạo user, mà Locust tạo user theo lô, khiến nhiều user bắn cùng lúc. Lần chạy thử trên Windows với `constant_pacing` cho 15–36% `503` sai ở 10–40 req/s; với lịch riêng thì 0 lỗi, p95 14–16 ms ở 20/40/80 req/s.
+
+**Độ ổn định giữa các lượt:** mỗi mức xác nhận ghi trung vị, min, max và độ lệch chuẩn tương đối (RSD) của throughput thành công và p95 qua các lần lặp (`searches.json` → `variability`). RSD throughput ở mức low vượt `max_rsd_pct` (10%) thì đánh dấu `stable: false` trong báo cáo: không gộp các lần lặp dao động mạnh thành một con số.
+
+**Độ trễ event loop của generator:** một greenlet riêng nhịp 50 ms đo mỗi giây lần bị chặn lâu nhất. Cách này bắt được cả lần chặn do chính vòng giám sát ghi file, thay vì chỉ đo lượt ngủ 1 giây của nó.
 
 ## 5. Fixture và công bằng giữa các lượt
 
@@ -128,7 +141,7 @@ Artifact chính:
 
 Latency dùng cohort request **bắt đầu** trong measure, gồm cả completion trong drain và timeout. RPS completed tính completion trong cửa sổ; pending/cross-boundary không bị lẳng lặng xóa. Trial bị abort/incomplete không có RPS so sánh trong biểu đồ. Không lấy trung bình các p95 worker.
 
-Exit code **0** chỉ khi đủ inventory chức năng, architecture/32 endpoint, các workload được xác nhận, recovery và spike/soak đạt, profile acceptance đầy đủ. Exit **2** là FAIL/UNKNOWN/incomplete; artifact vẫn được xuất. Bất kỳ kết quả giảm scope, hết budget, thiếu case, skipped fault, thiếu confirmation đều không được báo full PASS.
+Exit code **0** chỉ khi đủ inventory chức năng, architecture/37 endpoint, các workload được xác nhận, recovery và spike/soak đạt, profile acceptance đầy đủ. Exit **2** là FAIL/UNKNOWN/incomplete; artifact vẫn được xuất. Bất kỳ kết quả giảm scope, hết budget, thiếu case, skipped fault, thiếu confirmation đều không được báo full PASS.
 
 Suite tạo ZIP checkpoint sau nhóm chức năng và sau mỗi workload. Nếu bị ngắt, có thể xuất lại mọi artifact đã có mà không khởi động dịch vụ:
 
@@ -142,7 +155,7 @@ Notebook cũng gọi exporter sau khi tiến trình suite kết thúc. Các dòn
 
 ## 7. Những giới hạn phải giữ trong báo cáo
 
-- Cả Java, DB và Locust đồng vị trí trên Kaggle. Dù generator chưa chạm ngưỡng cảnh báo, đây vẫn là công suất của **môi trường đồng vị trí**. Muốn kết luận backend độc lập phải chạy generator trên máy khác.
+- Java, DB và Locust cùng một máy Kaggle. Tách CPU loại được việc tranh CPU, nhưng RAM, đĩa và cache vẫn dùng chung, và backend chỉ có một nửa số CPU. Đây vẫn là công suất của **môi trường cùng máy**. Muốn kết luận cho backend độc lập phải chạy generator trên máy khác.
 - Thiếu metric occupancy của Hikari nếu ứng dụng chưa expose; không thêm Actuator, không đoán pool size. Dùng wait/thread/log làm bằng chứng hỗ trợ, không coi tương quan là nguyên nhân đã chứng minh.
 - CPU process 100% tương ứng một core. Affinity/quota và CPU máy được ghi riêng.
 - Kiểm thử retry dùng cùng `Idempotency-Key` theo tài khoản trong thời hạn hiệu lực 24 giờ.
