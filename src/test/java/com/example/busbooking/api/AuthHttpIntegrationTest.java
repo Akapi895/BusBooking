@@ -326,12 +326,12 @@ class AuthHttpIntegrationTest {
         return json.readTree(result.getResponse().getContentAsString()).get("token").asString();
     }
     private Map<String, Object> registrationBody() {
-        return Map.of("fullName", "Nguyễn Văn Huy Hoàng", "email", EMAIL, "password", "Password123", "phone", "+84901234567");
+        return Map.of("fullName", "Nguyễn Văn Huy Hoàng", "email", EMAIL, "password", "BusTrip2026", "phone", "+84901234567");
     }
     private Map<String, Object> changed(String key, Object value) {
         var body = new HashMap<>(registrationBody()); body.put(key, value); return body;
     }
-    private Map<String, Object> loginBody() { return Map.of("email", EMAIL, "password", "Password123"); }
+    private Map<String, Object> loginBody() { return Map.of("email", EMAIL, "password", "BusTrip2026"); }
 
     @RestController
     static class FixtureController {

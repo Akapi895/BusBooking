@@ -85,14 +85,14 @@ class ProfileAndRolesIntegrationTest {
         String token = userToken(EMPLOYEE);
         putPassword(token, Map.of("currentPassword", "Wrong-pass1", "newPassword", "NewPassword456"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details.currentPassword").exists());
-        putPassword(token, Map.of("currentPassword", "Password123", "newPassword", "Password123"))
+        putPassword(token, Map.of("currentPassword", "BusTrip2026", "newPassword", "BusTrip2026"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details.newPassword").exists());
-        putPassword(token, Map.of("currentPassword", "Password123", "newPassword", "short"))
+        putPassword(token, Map.of("currentPassword", "BusTrip2026", "newPassword", "short"))
                 .andExpect(status().isBadRequest());
-        putPassword(token, Map.of("currentPassword", "Password123", "newPassword", "NewPassword456"))
+        putPassword(token, Map.of("currentPassword", "BusTrip2026", "newPassword", "NewPassword456"))
                 .andExpect(status().isNoContent());
         profile(token).andExpect(status().isUnauthorized());
-        assertThatThrownBy(() -> auth.login(new LoginCommand(EMPLOYEE, "Password123")))
+        assertThatThrownBy(() -> auth.login(new LoginCommand(EMPLOYEE, "BusTrip2026")))
                 .isInstanceOf(InvalidCredentialsException.class);
         String fresh = auth.login(new LoginCommand(EMPLOYEE, "NewPassword456")).token().value();
         profile(fresh).andExpect(status().isOk());
@@ -147,10 +147,10 @@ class ProfileAndRolesIntegrationTest {
     @Test
     void superAdminMustVerifyOtpBeforeLoginAndCanUseAdminFunctionsAndOwnProfile() throws Exception {
         assertThat(bootstrap.bootstrap(rootCommand(ROOT))).isEqualTo(BootstrapSuperAdminService.Result.CREATED_VERIFICATION_SENT);
-        postJson("/api/auth/login", Map.of("email", ROOT, "password", "Password123"))
+        postJson("/api/auth/login", Map.of("email", ROOT, "password", "BusTrip2026"))
                 .andExpect(status().isUnauthorized());
         postJson("/api/auth/verify-email", Map.of("email", ROOT, "code", codes.get(ROOT))).andExpect(status().isNoContent());
-        var response = postJson("/api/auth/login", Map.of("email", ROOT, "password", "Password123"))
+        var response = postJson("/api/auth/login", Map.of("email", ROOT, "password", "BusTrip2026"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.user.role").value("SUPER_ADMIN")).andReturn();
         String token = json.readTree(response.getResponse().getContentAsString()).get("token").asString();
         profile(token).andExpect(status().isOk()).andExpect(jsonPath("$.role").value("SUPER_ADMIN"));
@@ -320,21 +320,21 @@ class ProfileAndRolesIntegrationTest {
         jdbc.update("UPDATE email_verifications SET sent_at = sent_at - INTERVAL '61 seconds' WHERE user_id = (SELECT id FROM users WHERE email = ?)", ROOT);
         postJson("/api/auth/resend-verification", Map.of("email", ROOT)).andExpect(status().isAccepted());
         postJson("/api/auth/verify-email", Map.of("email", ROOT, "code", codes.get(ROOT))).andExpect(status().isNoContent());
-        postJson("/api/auth/login", Map.of("email", ROOT, "password", "Password123")).andExpect(status().isOk());
+        postJson("/api/auth/login", Map.of("email", ROOT, "password", "BusTrip2026")).andExpect(status().isOk());
     }
 
     private String rootToken() {
         bootstrap.bootstrap(rootCommand(ROOT));
         verification.verify(new VerifyEmailCommand(ROOT, codes.get(ROOT)));
-        return auth.login(new LoginCommand(ROOT, "Password123")).token().value();
+        return auth.login(new LoginCommand(ROOT, "BusTrip2026")).token().value();
     }
     private String userToken(String email) {
         auth.register(registration(email));
         verification.verify(new VerifyEmailCommand(email, codes.get(email)));
-        return auth.login(new LoginCommand(email, "Password123")).token().value();
+        return auth.login(new LoginCommand(email, "BusTrip2026")).token().value();
     }
-    private RegisterCommand registration(String email) { return new RegisterCommand("Hoang", email, "Password123", "0901234567"); }
-    private RegisterCommand rootCommand(String email) { return new RegisterCommand("Root", email, "Password123", "0901234567"); }
+    private RegisterCommand registration(String email) { return new RegisterCommand("Hoang", email, "BusTrip2026", "0901234567"); }
+    private RegisterCommand rootCommand(String email) { return new RegisterCommand("Root", email, "BusTrip2026", "0901234567"); }
     private ResultActions profile(String token) throws Exception { return mvc.perform(get("/api/users/me").header("Authorization", "Bearer " + token)); }
     private ResultActions admin(String token) throws Exception { return mvc.perform(get("/api/admin/phase4-check").header("Authorization", "Bearer " + token)); }
     private ResultActions putProfile(String token, Object body) throws Exception {

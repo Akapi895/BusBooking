@@ -60,7 +60,7 @@ class AuthServiceIntegrationTest {
         assertThat(registered.emailVerified()).isFalse();
         assertThat(deliveries).hasSize(1);
         User stored = users.findByEmail(EMAIL).orElseThrow();
-        assertThat(passwords.matches("Password123", stored.getPasswordHash())).isTrue();
+        assertThat(passwords.matches("BusTrip2026", stored.getPasswordHash())).isTrue();
         assertThat(stored.getRole().getName()).isEqualTo(RoleName.USER);
         String digest = jdbc.queryForObject("SELECT code_hash FROM email_verifications WHERE user_id = ?", String.class, stored.getId());
         assertThat(digest).matches("[a-f0-9]{64}").isNotEqualTo(deliveries.getFirst().code());
@@ -191,7 +191,7 @@ class AuthServiceIntegrationTest {
 
     @Test
     void legacyUnverifiedUserCanRequestFirstChallengeAfterMigration() {
-        users.save(new User(null, "Hoang", EMAIL, passwords.hash("Password123"), "0901234567",
+        users.save(new User(null, "Hoang", EMAIL, passwords.hash("BusTrip2026"), "0901234567",
                 roles.findByName(RoleName.USER).orElseThrow(), UserStatus.ACTIVE, null, null));
         assertThatThrownBy(() -> verification.verify(new VerifyEmailCommand(EMAIL, "012345")))
                 .isInstanceOf(InvalidVerificationCodeException.class);
@@ -230,7 +230,7 @@ class AuthServiceIntegrationTest {
 
     @Test
     void accountAndChallengeAreCreatedAtomically() {
-        User pending = new User(null, "Hoang", EMAIL, passwords.hash("Password123"), "0901234567",
+        User pending = new User(null, "Hoang", EMAIL, passwords.hash("BusTrip2026"), "0901234567",
                 roles.findByName(RoleName.USER).orElseThrow(), UserStatus.ACTIVE, false, null, null);
         // A hash longer than VARCHAR(64) violates the column constraint, triggering a DataIntegrityViolationException.
         // The @Transactional boundary on createPending() must roll back the user INSERT atomically.
@@ -293,10 +293,10 @@ class AuthServiceIntegrationTest {
     }
 
     private RegisterCommand command(String email) {
-        return new RegisterCommand("Nguyễn Văn Huy Hoàng", email, "Password123", "+84901234567");
+        return new RegisterCommand("Nguyễn Văn Huy Hoàng", email, "BusTrip2026", "+84901234567");
     }
 
-    private LoginCommand login() { return new LoginCommand(EMAIL, "Password123"); }
+    private LoginCommand login() { return new LoginCommand(EMAIL, "BusTrip2026"); }
 
     private void verifyLatest() {
         verification.verify(new VerifyEmailCommand(EMAIL, deliveries.getLast().code()));

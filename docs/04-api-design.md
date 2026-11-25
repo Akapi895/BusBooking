@@ -82,7 +82,7 @@ Content-Type: application/json
 {
   "fullName": "Nguyen Van A",
   "email": "a@example.com",
-  "password": "Password123",
+  "password": "BusTrip2026",
   "phone": "0901234567"
 }
 ```

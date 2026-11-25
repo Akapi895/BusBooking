@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.*;
 // Opt-in. PostgreSQL test + Mailpit are required; credentials below are disposable test fixtures.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "server.address=127.0.0.1", "spring.mail.host=127.0.0.1", "auth.bootstrap-super-admin.enabled=true",
-        "auth.bootstrap-super-admin.password=SmokeRootPassword123",
+        "auth.bootstrap-super-admin.password=SmokeRootBusTrip2026",
         "auth.bootstrap-super-admin.full-name=Root Smoke", "auth.bootstrap-super-admin.phone=0901234567"})
 @ActiveProfiles("test")
 class SuperAdminLiveHttpSmokeIT {
@@ -32,9 +32,9 @@ class SuperAdminLiveHttpSmokeIT {
     @Test
     void bootstrapsOnlyRootVerifiesBothEmailsUpdatesProfileAndManagesRolesThroughHttp() throws Exception {
         try (var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
-            assertThat(post(client, "/api/auth/login", Map.of("email", ROOT, "password", "SmokeRootPassword123")).statusCode()).isEqualTo(401);
+            assertThat(post(client, "/api/auth/login", Map.of("email", ROOT, "password", "SmokeRootBusTrip2026")).statusCode()).isEqualTo(401);
             verify(client, ROOT);
-            String rootToken = login(client, ROOT, "SmokeRootPassword123");
+            String rootToken = login(client, ROOT, "SmokeRootBusTrip2026");
             var registered = post(client, "/api/auth/register", Map.of("fullName", "Employee Smoke", "email", employee,
                     "password", "SmokeEmployee123", "phone", "0901234567"));
             assertThat(registered.statusCode()).isEqualTo(201);

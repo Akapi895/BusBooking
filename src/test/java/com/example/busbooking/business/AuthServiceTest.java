@@ -78,13 +78,13 @@ class AuthServiceTest {
     @Test
     void rejectsInvalidRegistrationFieldsBeforePersistence() {
         for (RegisterCommand invalid : new RegisterCommand[] {
-                new RegisterCommand(" ", "hoang@example.com", "Password123", "0901234567"),
-                new RegisterCommand("Hoang", "bad-email", "Password123", "0901234567"),
+                new RegisterCommand(" ", "hoang@example.com", "BusTrip2026", "0901234567"),
+                new RegisterCommand("Hoang", "bad-email", "BusTrip2026", "0901234567"),
                 new RegisterCommand("Hoang", "hoang@example.com", "short", "0901234567"),
                 new RegisterCommand("Hoang", "hoang@example.com", "a".repeat(73), "0901234567"),
-                new RegisterCommand("Hoang", "hoang@example.com", "Password123", "+14155552671"),
-                new RegisterCommand("Hoang", "hoang@example.com", "Password123", "0123456789"),
-                new RegisterCommand("Hoang", "hoang@example.com", "Password123", null) }) {
+                new RegisterCommand("Hoang", "hoang@example.com", "BusTrip2026", "+14155552671"),
+                new RegisterCommand("Hoang", "hoang@example.com", "BusTrip2026", "0123456789"),
+                new RegisterCommand("Hoang", "hoang@example.com", "BusTrip2026", null) }) {
             assertThatThrownBy(() -> auth.register(invalid)).isInstanceOf(InvalidAuthInputException.class);
         }
         assertThatThrownBy(() -> auth.register(null)).isInstanceOf(InvalidAuthInputException.class);
@@ -101,9 +101,9 @@ class AuthServiceTest {
     @Test
     void logsInOnlyVerifiedActiveUserAndUsesSeconds() {
         when(users.findByEmail("hoang@example.com")).thenReturn(Optional.of(user(UserStatus.ACTIVE, true)));
-        when(passwords.matches("Password123", "hash-fixture")).thenReturn(true);
+        when(passwords.matches("BusTrip2026", "hash-fixture")).thenReturn(true);
         when(tokens.issue(10L, 0)).thenReturn(new IssuedToken("test-only-token", 3600));
-        var result = auth.login(new LoginCommand(" HOANG@EXAMPLE.COM ", "Password123"));
+        var result = auth.login(new LoginCommand(" HOANG@EXAMPLE.COM ", "BusTrip2026"));
         assertThat(result.token().expiresInSeconds()).isEqualTo(3600);
         assertThat(result.user().id()).isEqualTo(10L);
         assertThat(result.toString()).doesNotContain("test-only-token", "hash-fixture");
@@ -123,7 +123,7 @@ class AuthServiceTest {
         when(passwords.matches(anyString(), anyString())).thenReturn(true);
         for (User blocked : new User[] { user(UserStatus.INACTIVE, true), user(UserStatus.ACTIVE, false) }) {
             when(users.findByEmail("hoang@example.com")).thenReturn(Optional.of(blocked));
-            assertThatThrownBy(() -> auth.login(new LoginCommand("hoang@example.com", "Password123")))
+            assertThatThrownBy(() -> auth.login(new LoginCommand("hoang@example.com", "BusTrip2026")))
                     .isInstanceOf(InvalidCredentialsException.class).hasMessage("Invalid email or password");
         }
         verifyNoInteractions(tokens);
@@ -132,9 +132,9 @@ class AuthServiceTest {
     @Test
     void comparesAgainstCachedDummyHashForUnknownEmail() {
         when(users.findByEmail("missing@example.com")).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> auth.login(new LoginCommand("missing@example.com", "Password123")))
+        assertThatThrownBy(() -> auth.login(new LoginCommand("missing@example.com", "BusTrip2026")))
                 .isInstanceOf(InvalidCredentialsException.class);
-        verify(passwords).matches("Password123", "hash-fixture");
+        verify(passwords).matches("BusTrip2026", "hash-fixture");
         verify(passwords, times(1)).hash(anyString());
         verifyNoInteractions(tokens);
     }
@@ -142,7 +142,7 @@ class AuthServiceTest {
     @Test
     void doesNotDisguiseDatabaseOrTokenProviderOutagesAsInvalidCredentials() {
         when(users.findByEmail("hoang@example.com")).thenThrow(new IllegalStateException("database unavailable"));
-        assertThatThrownBy(() -> auth.login(new LoginCommand("hoang@example.com", "Password123")))
+        assertThatThrownBy(() -> auth.login(new LoginCommand("hoang@example.com", "BusTrip2026")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(tokens);
     }
@@ -150,31 +150,31 @@ class AuthServiceTest {
     @Test
     void tokenProviderFailureRemainsASystemError() {
         when(users.findByEmail("hoang@example.com")).thenReturn(Optional.of(user(UserStatus.ACTIVE, true)));
-        when(passwords.matches("Password123", "hash-fixture")).thenReturn(true);
+        when(passwords.matches("BusTrip2026", "hash-fixture")).thenReturn(true);
         when(tokens.issue(10L, 0)).thenThrow(new IllegalStateException("token provider unavailable"));
-        assertThatThrownBy(() -> auth.login(new LoginCommand("hoang@example.com", "Password123")))
+        assertThatThrownBy(() -> auth.login(new LoginCommand("hoang@example.com", "BusTrip2026")))
                 .isInstanceOf(IllegalStateException.class).hasMessage("token provider unavailable");
     }
 
     @Test
     void rejectsMissingOrMalformedLoginWithoutIssuingTokens() {
         assertThatThrownBy(() -> auth.login(null)).isInstanceOf(InvalidCredentialsException.class);
-        assertThatThrownBy(() -> auth.login(new LoginCommand("invalid", "Password123")))
+        assertThatThrownBy(() -> auth.login(new LoginCommand("invalid", "BusTrip2026")))
                 .isInstanceOf(InvalidCredentialsException.class);
         verifyNoInteractions(tokens);
     }
 
     @Test
     void sensitiveCommandsAndTokenResultsAreRedacted() {
-        assertThat(validRegistration().toString()).doesNotContain("Password123");
-        assertThat(new LoginCommand("hoang@example.com", "Password123").toString()).doesNotContain("Password123");
+        assertThat(validRegistration().toString()).doesNotContain("BusTrip2026");
+        assertThat(new LoginCommand("hoang@example.com", "BusTrip2026").toString()).doesNotContain("BusTrip2026");
         assertThat(new com.example.busbooking.business.command.VerifyEmailCommand("hoang@example.com", "123456").toString())
                 .doesNotContain("123456");
         assertThat(new IssuedToken("secret-token", 60).toString()).doesNotContain("secret-token");
     }
 
     private RegisterCommand validRegistration() {
-        return new RegisterCommand("Hoang", "hoang@example.com", "Password123", "0901234567");
+        return new RegisterCommand("Hoang", "hoang@example.com", "BusTrip2026", "0901234567");
     }
 
     private User user(UserStatus status, boolean verified) {

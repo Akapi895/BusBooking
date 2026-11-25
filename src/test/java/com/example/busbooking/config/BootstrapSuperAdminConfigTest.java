@@ -34,13 +34,13 @@ class BootstrapSuperAdminConfigTest {
     @Test
     void devAndTestAreAllowedAndPropertiesNeverPrintPassword() throws Exception {
         var props = new BootstrapSuperAdminProperties(); props.setEnabled(true);
-        props.setEmail("root@example.com"); props.setFullName("Root"); props.setPhone("0901234567"); props.setPassword("SecretPassword123");
+        props.setEmail("root@example.com"); props.setFullName("Root"); props.setPhone("0901234567"); props.setPassword("SecretBusTrip2026");
         when(service.bootstrap(any())).thenReturn(BootstrapSuperAdminService.Result.CREATED_EMAIL_PENDING);
         for (String profile : new String[] {"dev", "test"}) {
             var environment = new MockEnvironment(); environment.setActiveProfiles(profile);
             config.superAdminBootstrapRunner(props, environment, service).run(new DefaultApplicationArguments());
         }
-        verify(service, times(2)).bootstrap(new RegisterCommand("Root", "root@example.com", "SecretPassword123", "0901234567"));
-        assertThat(props.toString()).doesNotContain("SecretPassword123");
+        verify(service, times(2)).bootstrap(new RegisterCommand("Root", "root@example.com", "SecretBusTrip2026", "0901234567"));
+        assertThat(props.toString()).doesNotContain("SecretBusTrip2026");
     }
 }

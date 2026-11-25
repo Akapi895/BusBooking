@@ -10,6 +10,14 @@ public final class AuthInputPolicy {
     private static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+");
     private static final Pattern PHONE = Pattern.compile("0(?:[35789][0-9]{8}|2[0-9]{9})");
 
+    // shortcut: a short built-in list of the most common 8+ character passwords; load a breach corpus if the threat model grows.
+    private static final java.util.Set<String> COMMON_PASSWORDS = java.util.Set.of(
+            "password", "password1", "password12", "password123", "password1234", "passw0rd", "p@ssw0rd", "p@ssword",
+            "12345678", "123456789", "1234567890", "0123456789", "87654321", "11111111", "00000000", "12341234",
+            "qwertyui", "qwerty12", "qwerty123", "qwertyuiop", "1q2w3e4r", "1qaz2wsx", "zaq12wsx", "asdfghjk",
+            "abc12345", "abcd1234", "iloveyou", "iloveyou1", "admin123", "administrator", "letmein1", "welcome1",
+            "welcome123", "sunshine", "princess", "football", "baseball", "superman", "trustno1", "matkhau123");
+
     private AuthInputPolicy() { }
 
     public static String email(String raw) {
@@ -42,6 +50,9 @@ public final class AuthInputPolicy {
         if (password == null || password.codePointCount(0, password.length()) < 8
                 || password.isBlank() || password.getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new InvalidAuthInputException("password", "Password requires at least 8 characters and at most 72 UTF-8 bytes");
+        }
+        if (COMMON_PASSWORDS.contains(password.toLowerCase(Locale.ROOT))) {
+            throw new InvalidAuthInputException("password", "Password is too common; choose a less predictable one");
         }
     }
 }

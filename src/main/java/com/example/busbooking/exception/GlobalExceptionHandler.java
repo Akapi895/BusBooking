@@ -10,6 +10,7 @@ import java.util.*;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private final ApiErrorWriter errors;
     public GlobalExceptionHandler(ApiErrorWriter errors) { this.errors = errors; }
 
@@ -167,7 +168,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Object> unexpected(WebRequest request) {
+    public ResponseEntity<Object> unexpected(Exception error, WebRequest request) {
+        // The client gets a generic body; the cause stays in the server log for operators.
+        LOG.error("event=unexpected_error path={}", request.getDescription(false), error);
         // Do not serialize SQL, credentials, rejected values or exception messages.
         return reply(request, 500, "INTERNAL_ERROR", "An internal error occurred", Map.of(), new HttpHeaders());
     }

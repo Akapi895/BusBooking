@@ -64,7 +64,7 @@ class PasswordResetIntegrationTest {
         reset.reset(EMAIL, code, "NewPassword456");
 
         assertThatThrownBy(() -> reset.reset(EMAIL, code, "Another789xyz")).isInstanceOf(InvalidVerificationCodeException.class);
-        assertThatThrownBy(() -> auth.login(new LoginCommand(EMAIL, "Password123"))).isInstanceOf(InvalidCredentialsException.class);
+        assertThatThrownBy(() -> auth.login(new LoginCommand(EMAIL, "BusTrip2026"))).isInstanceOf(InvalidCredentialsException.class);
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + oldToken)).andExpect(status().isUnauthorized());
         String fresh = auth.login(new LoginCommand(EMAIL, "NewPassword456")).token().value();
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + fresh)).andExpect(status().isOk());
@@ -85,7 +85,7 @@ class PasswordResetIntegrationTest {
 
     @Test
     void ineligibleAccountsGetTheSameAcceptedResponseAndNoEmail() throws Exception {
-        auth.register(new RegisterCommand("Hoang", "reset.phase2.pending@example.com", "Password123", "0901234567"));
+        auth.register(new RegisterCommand("Hoang", "reset.phase2.pending@example.com", "BusTrip2026", "0901234567"));
         for (String email : new String[] {"reset.phase2.pending@example.com", "reset.phase2.nobody@example.com"}) {
             mvc.perform(post("/api/auth/forgot-password").contentType(MediaType.APPLICATION_JSON)
                     .content("{\"email\":\"" + email + "\"}")).andExpect(status().isAccepted());
@@ -97,8 +97,8 @@ class PasswordResetIntegrationTest {
     }
 
     private String verifiedLogin() {
-        auth.register(new RegisterCommand("Hoang", EMAIL, "Password123", "0901234567"));
+        auth.register(new RegisterCommand("Hoang", EMAIL, "BusTrip2026", "0901234567"));
         verification.verify(new VerifyEmailCommand(EMAIL, verifyCodes.get(EMAIL)));
-        return auth.login(new LoginCommand(EMAIL, "Password123")).token().value();
+        return auth.login(new LoginCommand(EMAIL, "BusTrip2026")).token().value();
     }
 }

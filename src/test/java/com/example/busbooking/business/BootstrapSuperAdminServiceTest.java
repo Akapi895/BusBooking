@@ -19,12 +19,12 @@ class BootstrapSuperAdminServiceTest {
     private final PasswordHasher passwords = mock(PasswordHasher.class);
     private final EmailVerificationService verification = mock(EmailVerificationService.class);
     private final BootstrapSuperAdminService bootstrap = new BootstrapSuperAdminService(users, roles, passwords, verification);
-    private final RegisterCommand command = new RegisterCommand("Root", "root@example.com", "Password123", "0901234567");
+    private final RegisterCommand command = new RegisterCommand("Root", "root@example.com", "BusTrip2026", "0901234567");
 
     @BeforeEach
     void setup() {
         when(roles.findByName(RoleName.SUPER_ADMIN)).thenReturn(Optional.of(new Role(3L, RoleName.SUPER_ADMIN)));
-        when(passwords.hash("Password123")).thenReturn("hash-fixture");
+        when(passwords.hash("BusTrip2026")).thenReturn("hash-fixture");
     }
 
     @Test
@@ -51,7 +51,7 @@ class BootstrapSuperAdminServiceTest {
     @Test
     void cannotReplaceTheSuperAdminWithAnotherEmail() {
         when(users.findSuperAdmin()).thenReturn(Optional.of(root(UserStatus.ACTIVE, true)));
-        assertThatThrownBy(() -> bootstrap.bootstrap(new RegisterCommand("Root2", "other@example.com", "Password123", "0901234567")))
+        assertThatThrownBy(() -> bootstrap.bootstrap(new RegisterCommand("Root2", "other@example.com", "BusTrip2026", "0901234567")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(verification);
     }

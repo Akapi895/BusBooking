@@ -83,7 +83,7 @@ class AuthRateLimitHttpTest {
     }
 
     private static String body(String email) {
-        return "{\"email\":\"" + email + "\",\"password\":\"Password123\"}";
+        return "{\"email\":\"" + email + "\",\"password\":\"BusTrip2026\"}";
     }
 
     private ResultActions attemptFrom(String address, String body) throws Exception {

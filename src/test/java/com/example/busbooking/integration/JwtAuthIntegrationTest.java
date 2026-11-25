@@ -166,8 +166,8 @@ class JwtAuthIntegrationTest {
     }
 
     private RegisterCommand registration() {
-        return new RegisterCommand("Nguyễn Văn Huy Hoàng", EMAIL, "Password123", "0901234567");
+        return new RegisterCommand("Nguyễn Văn Huy Hoàng", EMAIL, "BusTrip2026", "0901234567");
     }
 
-    private LoginCommand login() { return new LoginCommand(EMAIL, "Password123"); }
+    private LoginCommand login() { return new LoginCommand(EMAIL, "BusTrip2026"); }
 }

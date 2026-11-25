@@ -18,6 +18,8 @@ import com.example.busbooking.exception.ErrorResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.example.busbooking.domain.exception.InvalidAuthInputException;
+import com.example.busbooking.domain.exception.InvalidVerificationCodeException;
+import com.example.busbooking.domain.exception.InvalidCredentialsException;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -37,6 +39,7 @@ import org.springframework.web.bind.annotation.*;
         @ApiResponse(responseCode = "500", description = "Internal error", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 })
 public class AuthController {
+    private static final org.slf4j.Logger AUDIT = org.slf4j.LoggerFactory.getLogger("security.audit");
     private final AuthService auth;
     private final EmailVerificationService verification;
     private final AuthDtoMapper mapper;
@@ -67,8 +70,15 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(summary = "Login after email verification and receive an access JWT")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        throttleAccount(request.email());
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(mapper.login(auth.login(mapper.command(request))));
+        String account = throttleAccount(request.email());
+        try {
+            var result = auth.login(mapper.command(request));
+            AUDIT.info("event=login_succeeded userId={}", result.user().id());
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(mapper.login(result));
+        } catch (InvalidCredentialsException failed) {
+            AUDIT.warn("event=login_failed account={}", account);
+            throw failed;
+        }
     }
 
     @PostMapping("/verify-email")
@@ -103,7 +113,13 @@ public class AuthController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Set a new password with the emailed code; every existing access token is revoked")
     public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        passwordReset.reset(request.email(), request.code(), request.newPassword());
+        try {
+            passwordReset.reset(request.email(), request.code(), request.newPassword());
+        } catch (InvalidVerificationCodeException failed) {
+            AUDIT.warn("event=password_reset_failed account={}", accountId(request.email()));
+            throw failed;
+        }
+        AUDIT.info("event=password_reset account={}", accountId(request.email()));
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
@@ -113,6 +129,7 @@ public class AuthController {
     @Operation(summary = "Revoke every access token issued to the current account")
     public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
         auth.logout(principal.userId());
+        AUDIT.info("event=logout userId={}", principal.userId());
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
@@ -125,12 +142,23 @@ public class AuthController {
     }
 
     // The per-IP filter cannot stop one account being guessed from many addresses.
-    private void throttleAccount(String rawEmail) {
+    private String throttleAccount(String rawEmail) {
         String email;
         try { email = AuthInputPolicy.email(rawEmail); }
-        catch (InvalidAuthInputException invalid) { return; } // login rejects it without touching an account
-        var decision = limiter.consume(sha256(email), AuthRateLimitProperties.LOGIN_ACCOUNT);
-        if (!decision.allowed()) { throw new LoginThrottledException(decision.retryAfterSeconds()); }
+        catch (InvalidAuthInputException invalid) { return "invalid"; } // login rejects it without touching an account
+        String key = sha256(email);
+        var decision = limiter.consume(key, AuthRateLimitProperties.LOGIN_ACCOUNT);
+        if (!decision.allowed()) {
+            AUDIT.warn("event=login_throttled account={}", key.substring(0, 12));
+            throw new LoginThrottledException(decision.retryAfterSeconds());
+        }
+        return key.substring(0, 12);
+    }
+
+    // Pseudonymous account reference for the audit log: correlates events without storing the email.
+    private static String accountId(String rawEmail) {
+        try { return sha256(AuthInputPolicy.email(rawEmail)).substring(0, 12); }
+        catch (InvalidAuthInputException invalid) { return "invalid"; }
     }
 
     // Keeps raw emails out of limiter keys stored in Redis.

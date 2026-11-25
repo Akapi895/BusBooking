@@ -27,10 +27,10 @@ class AuthLiveHttpSmokeIT {
         String email = "live.phase3." + UUID.randomUUID() + "@example.com";
         try (var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
             var register = post(client, "/api/auth/register", Map.of("fullName", "Hoang HTTP Smoke",
-                    "email", email, "password", "SmokePassword123", "phone", "0901234567"));
+                    "email", email, "password", "SmokeBusTrip2026", "phone", "0901234567"));
             assertThat(register.statusCode()).isEqualTo(201);
             assertThat(json.readTree(register.body()).get("emailVerified").asBoolean()).isFalse();
-            var denied = post(client, "/api/auth/login", Map.of("email", email, "password", "SmokePassword123"));
+            var denied = post(client, "/api/auth/login", Map.of("email", email, "password", "SmokeBusTrip2026"));
             assertThat(denied.statusCode()).isEqualTo(401);
 
             var inbox = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:8025/api/v1/messages"))
@@ -47,7 +47,7 @@ class AuthLiveHttpSmokeIT {
             }
             assertThat(code).as("OTP delivered to the local Mailpit inbox").isNotNull();
             assertThat(post(client, "/api/auth/verify-email", Map.of("email", email, "code", code)).statusCode()).isEqualTo(204);
-            var login = post(client, "/api/auth/login", Map.of("email", email, "password", "SmokePassword123"));
+            var login = post(client, "/api/auth/login", Map.of("email", email, "password", "SmokeBusTrip2026"));
             assertThat(login.statusCode()).isEqualTo(200);
             String token = json.readTree(login.body()).get("token").asString();
             var me = client.send(HttpRequest.newBuilder(url("/api/auth/me"))

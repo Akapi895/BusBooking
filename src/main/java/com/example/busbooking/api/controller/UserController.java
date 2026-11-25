@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
         @ApiResponse(responseCode = "500", description = "Internal error", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 })
 public class UserController {
+    private static final org.slf4j.Logger AUDIT = org.slf4j.LoggerFactory.getLogger("security.audit");
     private final UserService users;
     private final UserDtoMapper mapper;
     private final AuthRateLimiter limiter;
@@ -59,6 +60,7 @@ public class UserController {
         var decision = limiter.consume("change-password:" + principal.userId(), AuthRateLimitProperties.LOGIN_ACCOUNT);
         if (!decision.allowed()) { throw new LoginThrottledException(decision.retryAfterSeconds()); }
         users.changePassword(principal.userId(), request.currentPassword(), request.newPassword());
+        AUDIT.info("event=password_changed userId={}", principal.userId());
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 }

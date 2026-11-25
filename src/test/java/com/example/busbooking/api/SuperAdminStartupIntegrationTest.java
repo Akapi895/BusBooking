@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "auth.bootstrap-super-admin.enabled=true",
         "auth.bootstrap-super-admin.email=startup.phase4.root@example.com",
-        "auth.bootstrap-super-admin.password=StartupPassword123",
+        "auth.bootstrap-super-admin.password=StartupBusTrip2026",
         "auth.bootstrap-super-admin.full-name=Root",
         "auth.bootstrap-super-admin.phone=0901234567"})
 @ActiveProfiles("test")
@@ -47,7 +47,7 @@ class SuperAdminStartupIntegrationTest {
         assertThat(root.isEmailVerified()).isFalse();
         var code = ArgumentCaptor.forClass(String.class);
         verify(sender).send(eq(root.getEmail()), code.capture(), any());
-        byte[] login = json.writeValueAsBytes(Map.of("email", root.getEmail(), "password", "StartupPassword123"));
+        byte[] login = json.writeValueAsBytes(Map.of("email", root.getEmail(), "password", "StartupBusTrip2026"));
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(login))
                 .andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/verify-email").contentType(MediaType.APPLICATION_JSON)
