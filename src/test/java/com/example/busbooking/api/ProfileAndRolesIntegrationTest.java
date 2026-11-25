@@ -32,7 +32,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = {"auth.rate-limit.login-limit=500", "auth.rate-limit.verify-limit=500"})
+@SpringBootTest(properties = {"auth.rate-limit.login-limit=500", "auth.rate-limit.login-account-limit=500", "auth.rate-limit.verify-limit=500"})
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 @Import(ProfileAndRolesIntegrationTest.AdminFixture.class)

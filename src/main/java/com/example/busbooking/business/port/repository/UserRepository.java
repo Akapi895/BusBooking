@@ -5,7 +5,7 @@ import com.example.busbooking.domain.enums.RoleName;
 import java.util.Optional;
 
 public interface UserRepository {
-    record Principal(long id, String email, RoleName role) {}
+    record Principal(long id, String email, RoleName role, int tokenVersion) {}
 
     Optional<Principal> findActiveVerifiedPrincipal(Long id);
     Optional<User> findById(Long id);
@@ -14,4 +14,6 @@ public interface UserRepository {
     User save(User user);
     Optional<User> updateProfile(Long userId, String fullName, String phone);
     Optional<User> findSuperAdmin();
+    /** Invalidates every access token issued to the user so far. */
+    void revokeTokens(Long userId);
 }

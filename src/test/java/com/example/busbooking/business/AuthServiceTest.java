@@ -102,12 +102,12 @@ class AuthServiceTest {
     void logsInOnlyVerifiedActiveUserAndUsesSeconds() {
         when(users.findByEmail("hoang@example.com")).thenReturn(Optional.of(user(UserStatus.ACTIVE, true)));
         when(passwords.matches("Password123", "hash-fixture")).thenReturn(true);
-        when(tokens.issue(10L)).thenReturn(new IssuedToken("test-only-token", 3600));
+        when(tokens.issue(10L, 0)).thenReturn(new IssuedToken("test-only-token", 3600));
         var result = auth.login(new LoginCommand(" HOANG@EXAMPLE.COM ", "Password123"));
         assertThat(result.token().expiresInSeconds()).isEqualTo(3600);
         assertThat(result.user().id()).isEqualTo(10L);
         assertThat(result.toString()).doesNotContain("test-only-token", "hash-fixture");
-        verify(tokens).issue(10L);
+        verify(tokens).issue(10L, 0);
     }
 
     @Test
@@ -151,7 +151,7 @@ class AuthServiceTest {
     void tokenProviderFailureRemainsASystemError() {
         when(users.findByEmail("hoang@example.com")).thenReturn(Optional.of(user(UserStatus.ACTIVE, true)));
         when(passwords.matches("Password123", "hash-fixture")).thenReturn(true);
-        when(tokens.issue(10L)).thenThrow(new IllegalStateException("token provider unavailable"));
+        when(tokens.issue(10L, 0)).thenThrow(new IllegalStateException("token provider unavailable"));
         assertThatThrownBy(() -> auth.login(new LoginCommand("hoang@example.com", "Password123")))
                 .isInstanceOf(IllegalStateException.class).hasMessage("token provider unavailable");
     }

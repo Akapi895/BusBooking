@@ -52,6 +52,12 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    @Transactional
+    public void revokeTokens(Long userId) {
+        repository.incrementTokenVersion(userId);
+    }
+
+    @Override
     public Optional<User> findSuperAdmin() {
         return repository.findByRole_Name(RoleName.SUPER_ADMIN).map(mapper::toDomain);
     }

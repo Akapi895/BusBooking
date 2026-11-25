@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
-        "auth.rate-limit.register-limit=500", "auth.rate-limit.login-limit=500",
+        "auth.rate-limit.register-limit=500", "auth.rate-limit.login-limit=500", "auth.rate-limit.login-account-limit=500",
         "auth.rate-limit.verify-limit=500", "auth.rate-limit.resend-limit=500",
         "auth.cors.allowed-origins=https://client.example"})
 @ActiveProfiles("test")
@@ -275,6 +275,7 @@ class AuthHttpIntegrationTest {
         mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.paths['/api/auth/me'].get.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/auth/logout'].post.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/users/me'].get.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/users/me'].put.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/admin/users/{userId}/role'].put.security[0].bearerAuth").isArray())

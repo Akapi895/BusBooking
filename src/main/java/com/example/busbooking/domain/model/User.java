@@ -14,12 +14,17 @@ public final class User {
     private final boolean emailVerified;
     private final Instant createdAt;
     private final Instant updatedAt;
+    private final int tokenVersion;
 
     public User(Long id, String fullName, String email, String passwordHash, String phone, Role role, UserStatus status, Instant createdAt, Instant updatedAt) {
         this(id, fullName, email, passwordHash, phone, role, status, false, createdAt, updatedAt);
     }
 
     public User(Long id, String fullName, String email, String passwordHash, String phone, Role role, UserStatus status, boolean emailVerified, Instant createdAt, Instant updatedAt) {
+        this(id, fullName, email, passwordHash, phone, role, status, emailVerified, createdAt, updatedAt, 0);
+    }
+
+    public User(Long id, String fullName, String email, String passwordHash, String phone, Role role, UserStatus status, boolean emailVerified, Instant createdAt, Instant updatedAt, int tokenVersion) {
         this.id = id;
         this.fullName = fullName;
         this.email = email;
@@ -30,6 +35,7 @@ public final class User {
         this.emailVerified = emailVerified;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.tokenVersion = tokenVersion;
     }
 
     public Long getId() { return id; }
@@ -51,4 +57,6 @@ public final class User {
     public Instant getCreatedAt() { return createdAt; }
 
     public Instant getUpdatedAt() { return updatedAt; }
+
+    public int getTokenVersion() { return tokenVersion; }
 }

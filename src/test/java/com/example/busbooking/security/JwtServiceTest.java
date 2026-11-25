@@ -16,11 +16,11 @@ class JwtServiceTest {
         var result = jwt.issue(42L);
         assertThat(result.expiresInSeconds()).isEqualTo(3600);
         var verified = jwt.verify(result.value());
-        assertThat(verified).isEqualTo(new VerifiedToken(42L, NOW, NOW.plusSeconds(3600)));
+        assertThat(verified).isEqualTo(new VerifiedToken(42L, NOW, NOW.plusSeconds(3600), 0));
         var parsed = Jwts.parser().verifyWith(key("HmacSHA256")).clock(() -> Date.from(NOW))
                 .build().parseSignedClaims(result.value());
         assertThat(parsed.getHeader().getAlgorithm()).isEqualTo("HS256");
-        assertThat(parsed.getPayload()).containsOnlyKeys("sub", "iat", "exp", "iss");
+        assertThat(parsed.getPayload()).containsOnlyKeys("sub", "iat", "exp", "iss", "ver");
         assertThat(result.toString()).doesNotContain(result.value());
         assertThat(verified.toString()).doesNotContain(result.value());
     }

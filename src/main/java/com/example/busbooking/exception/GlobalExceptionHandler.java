@@ -100,6 +100,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return reply(request, 429, "RATE_LIMITED", "Please wait before requesting another code", Map.of(), headers);
     }
 
+    @ExceptionHandler(com.example.busbooking.security.ratelimit.LoginThrottledException.class)
+    public ResponseEntity<Object> loginThrottled(com.example.busbooking.security.ratelimit.LoginThrottledException error,
+                                                 WebRequest request) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, Long.toString(error.getRetryAfterSeconds()));
+        return reply(request, 429, "RATE_LIMITED", "Too many requests; please try again later", Map.of(), headers);
+    }
+
+    @ExceptionHandler(com.example.busbooking.security.ratelimit.AuthRateLimitUnavailableException.class)
+    public ResponseEntity<Object> rateLimitUnavailable(WebRequest request) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "1");
+        return reply(request, 503, "SERVICE_UNAVAILABLE", "Please retry shortly", Map.of(), headers);
+    }
+
     @ExceptionHandler(EmailDeliveryException.class)
     public ResponseEntity<Object> delivery(WebRequest request) {
         return reply(request, 503, "EMAIL_DELIVERY_UNAVAILABLE",

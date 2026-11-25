@@ -16,7 +16,8 @@ public class UserPersistenceMapper {
     public User toDomain(UserEntity entity) {
         return new User(entity.getId(), entity.getFullName(), entity.getEmail(),
                 entity.getPasswordHash(), entity.getPhone(), roleMapper.toDomain(entity.getRole()),
-                entity.getStatus(), entity.isEmailVerified(), entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.getStatus(), entity.isEmailVerified(), entity.getCreatedAt(), entity.getUpdatedAt(),
+                entity.getTokenVersion());
     }
 
     public UserEntity toEntity(User user) {

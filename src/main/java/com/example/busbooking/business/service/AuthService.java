@@ -69,6 +69,11 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
         User authenticated = user.get();
-        return new LoginResult(tokens.issue(authenticated.getId()), AuthenticatedUser.from(authenticated));
+        return new LoginResult(tokens.issue(authenticated.getId(), authenticated.getTokenVersion()), AuthenticatedUser.from(authenticated));
+    }
+
+    public void logout(Long userId) {
+        if (userId == null || userId <= 0) { throw new InvalidCredentialsException(); }
+        users.revokeTokens(userId);
     }
 }

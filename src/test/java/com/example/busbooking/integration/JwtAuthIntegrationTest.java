@@ -78,6 +78,17 @@ class JwtAuthIntegrationTest {
     }
 
     @Test
+    void logoutRevokesEarlierTokensButNotLaterLogins() throws Exception {
+        String before = verifiedToken();
+        var principal = authenticate(before);
+        auth.logout(principal.userId());
+        assertDenied(before);
+        String after = auth.login(login()).token().value();
+        assertThat(authenticate(after).userId()).isEqualTo(principal.userId());
+        assertThat(jwt.verify(after).tokenVersion()).isEqualTo(1);
+    }
+
+    @Test
     void validTokenCannotAuthenticateAfterAccountIsDisabled() throws Exception {
         String token = verifiedToken();
         jdbc.update("UPDATE users SET status = 'INACTIVE' WHERE email = ?", EMAIL);
