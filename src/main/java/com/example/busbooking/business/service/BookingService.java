@@ -134,6 +134,10 @@ public class BookingService {
         if (!admin && !TravelTime.now(clock).isBefore(trip.getDepartureTime().minusMinutes(30))) {
             throw new BusinessException("The cancellation window has closed");
         }
+        // Admins skip the 30-minute window, but a departed trip's seats can no longer be restored.
+        if (trip.getStatus() != TripStatus.SCHEDULED || !TravelTime.now(clock).isBefore(trip.getDepartureTime())) {
+            throw new BusinessException("Bookings can only be cancelled before the trip departs");
+        }
         if (trip.getVehicle() == null
                 || (long) trip.getAvailableSeats() + booking.getQuantity() > trip.getVehicle().seatCapacity()) {
             throw new BusinessException("Unable to restore available seats");

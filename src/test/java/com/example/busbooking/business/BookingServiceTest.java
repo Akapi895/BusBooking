@@ -203,6 +203,7 @@ class BookingServiceTest {
         when(booking.getQuantity()).thenReturn(2);
         when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getDepartureTime()).thenReturn(future);
+        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
         when(trip.getAvailableSeats()).thenReturn(3);
         when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 10, "Operator"));
         when(tripRepository.updateAvailableSeats(TRIP_ID, 2)).thenReturn(true);
@@ -252,6 +253,7 @@ class BookingServiceTest {
         when(booking.getQuantity()).thenReturn(2);
         when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getDepartureTime()).thenReturn(future);
+        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
         when(trip.getAvailableSeats()).thenReturn(3);
         when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 10, "Operator"));
         when(tripRepository.updateAvailableSeats(TRIP_ID, 2)).thenReturn(false);
@@ -272,6 +274,7 @@ class BookingServiceTest {
         when(booking.getQuantity()).thenReturn(2);
         when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
         when(trip.getDepartureTime()).thenReturn(future);
+        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
         when(trip.getAvailableSeats()).thenReturn(9);
         when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 10, "Operator"));
 
@@ -280,5 +283,58 @@ class BookingServiceTest {
 
         verify(tripRepository, never()).updateAvailableSeats(anyLong(), anyInt());
         verify(bookingRepository, never()).updateStatus(anyLong(), any(BookingStatus.class));
+    }
+
+    @Test
+    void cancel_whenAdminCancelsBookingOfDepartedTrip_shouldRejectWithoutRestoringSeats() {
+        for (TripStatus status : List.of(TripStatus.IN_PROGRESS, TripStatus.COMPLETED)) {
+            Booking booking = mock(Booking.class);
+            Trip trip = mock(Trip.class);
+            when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
+            when(booking.getStatus()).thenReturn(BookingStatus.CONFIRMED);
+            when(booking.getTripId()).thenReturn(TRIP_ID);
+            when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+            when(trip.getStatus()).thenReturn(status);
+
+            assertThrows(BusinessException.class, () -> bookingService.cancel(99L, true, BOOKING_ID));
+        }
+        verify(tripRepository, never()).updateAvailableSeats(anyLong(), anyInt());
+        verify(bookingRepository, never()).updateStatus(anyLong(), any(BookingStatus.class));
+    }
+
+    @Test
+    void cancel_whenAdminCancelsScheduledTripPastItsDepartureTime_shouldReject() {
+        Booking booking = mock(Booking.class);
+        Trip trip = mock(Trip.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(booking.getStatus()).thenReturn(BookingStatus.CONFIRMED);
+        when(booking.getTripId()).thenReturn(TRIP_ID);
+        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        // The lifecycle job has not yet moved the trip to IN_PROGRESS.
+        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
+        when(trip.getDepartureTime()).thenReturn(java.time.LocalDateTime.of(2026, 1, 1, 6, 59));
+
+        assertThrows(BusinessException.class, () -> bookingService.cancel(99L, true, BOOKING_ID));
+        verify(tripRepository, never()).updateAvailableSeats(anyLong(), anyInt());
+    }
+
+    @Test
+    void cancel_whenAdminCancelsInsideCustomerWindow_shouldStillRestoreSeats() {
+        Booking booking = mock(Booking.class);
+        Trip trip = mock(Trip.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(booking.getStatus()).thenReturn(BookingStatus.CONFIRMED);
+        when(booking.getTripId()).thenReturn(TRIP_ID);
+        when(booking.getQuantity()).thenReturn(1);
+        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
+        // 07:00 Vietnam time now; departure in 10 minutes is inside the customer cutoff.
+        when(trip.getDepartureTime()).thenReturn(java.time.LocalDateTime.of(2026, 1, 1, 7, 10));
+        when(trip.getAvailableSeats()).thenReturn(3);
+        when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 10, "Operator"));
+        when(tripRepository.updateAvailableSeats(TRIP_ID, 1)).thenReturn(true);
+
+        bookingService.cancel(99L, true, BOOKING_ID);
+        verify(bookingRepository).updateStatus(BOOKING_ID, BookingStatus.CANCELLED);
     }
 }
