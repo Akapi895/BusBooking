@@ -5,6 +5,7 @@ import com.example.busbooking.security.ratelimit.*;
 import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
@@ -68,6 +69,8 @@ public class SecurityConfig {
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(entryPoint).accessDeniedHandler(deniedHandler))
                 .authorizeHttpRequests(access -> {
                     access.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
+                    // Actuator only listens on the loopback management port; the API port never serves it.
+                    access.requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll();
                     access.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
                             "/api/auth/verify-email", "/api/auth/resend-verification").permitAll();
                     access.requestMatchers(HttpMethod.GET, "/api/auth/me").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");

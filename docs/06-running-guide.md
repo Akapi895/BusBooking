@@ -170,6 +170,10 @@ Với backend local cổng 8085 hoặc Compose publish 8086, khi tài liệu API
 | OpenAPI JSON | http://localhost:8085/v3/api-docs (local); http://localhost:8086/v3/api-docs (Compose) |
 | Base API | http://localhost:8085/api (local); http://localhost:8086/api (Compose) |
 | Mailpit (nếu có) | http://localhost:8025 (container riêng cho local); http://localhost:8026 (Compose) |
+| Actuator health | http://127.0.0.1:8081/actuator/health (local); http://127.0.0.1:8087/actuator/health (Compose) |
+| Metric pool DB | http://127.0.0.1:8081/actuator/metrics/hikaricp.connections.active (local); cổng 8087 với Compose. Xem thêm `hikaricp.connections.pending`, `.max`, `.idle`, `.acquire` |
+
+Actuator chạy trên cổng quản trị riêng (`MANAGEMENT_PORT`, mặc định 8081) và chỉ nghe `127.0.0.1` (`MANAGEMENT_ADDRESS`); cổng API 8085/8086 không phục vụ `/actuator`. Chỉ mở `health` và `metrics`; health không hiện chi tiết và không tính SMTP. Khi dùng Redis cho rate limit, đặt `MANAGEMENT_HEALTH_REDIS=true` để health phản ánh Redis.
 
 Kiểm tra HTTP và xuất đặc tả API từ **ứng dụng đang chạy**:
 
