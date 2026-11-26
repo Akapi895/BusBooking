@@ -163,12 +163,17 @@ dialog::backdrop { background: rgb(8 20 24 / .55); }
 .total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 14px; border-top: 1px dashed var(--line); font-weight: 600; color: var(--muted); }
 .total output { font-size: 22px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 24px 24px; }
+.hold { align-items: center; text-align: center; padding-top: 24px; }
+.hold-countdown { margin: 0; font-size: 40px; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; color: var(--warn); }
+.hold .total { align-self: stretch; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.row-actions .primary { padding: 6px 12px; }
 .section-label { margin: 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .done { align-items: center; gap: 8px; text-align: center; padding-block: 28px 20px; }
 .done svg { color: var(--ok); }
 .done h3 { font-size: 20px; }
 .done-label { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
-.done-code { margin: 0; padding: 8px 18px; border: 1.5px dashed var(--line); border-radius: var(--r); font: 700 26px var(--mono); letter-spacing: .06em; }
+.done-code { margin: 0; padding: 8px 14px; border: 1.5px dashed var(--line); border-radius: var(--r); font: 700 18px var(--mono); letter-spacing: .02em; overflow-wrap: anywhere; }
 
 /* Toast */
 #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 30; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: min(480px, calc(100vw - 32px)); padding: 12px 18px; border-radius: 8px; background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 500; box-shadow: 0 12px 30px -10px rgb(0 0 0 / .45); }

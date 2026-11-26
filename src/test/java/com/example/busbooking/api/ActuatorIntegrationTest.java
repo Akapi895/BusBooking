@@ -30,9 +30,18 @@ class ActuatorIntegrationTest {
     }
 
     @Test
+    void managementPortServesPrometheusScrape() throws Exception {
+        get(apiPort, "/api/locations"); // produce one http.server.requests sample
+        var scrape = get(managementPort, "/actuator/prometheus");
+        assertThat(scrape.statusCode()).isEqualTo(200);
+        assertThat(scrape.body()).contains("hikaricp_connections_pending").contains("http_server_requests_seconds_bucket");
+    }
+
+    @Test
     void apiPortDoesNotExposeActuator() throws Exception {
         assertThat(get(apiPort, "/actuator/health").statusCode()).isNotEqualTo(200);
         assertThat(get(apiPort, "/actuator/metrics").statusCode()).isNotEqualTo(200);
+        assertThat(get(apiPort, "/actuator/prometheus").statusCode()).isNotEqualTo(200);
     }
 
     private HttpResponse<String> get(int port, String path) throws Exception {

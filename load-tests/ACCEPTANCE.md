@@ -62,7 +62,7 @@ Cập nhật dataset bằng kit mới và import notebook mới trước khi ch�
 |---|---|
 | Architecture | Đọc constant pool class trong JAR để phát hiện business tham chiếu API/data/security/notification/JPA/Servlet; không load target class |
 | Schema | Flyway migrate DB rỗng, checksum/version migration trong manifest, Hibernate validate khi app khởi động |
-| API | Quan sát thành công toàn bộ 37 method–path của controller hiện tại; CRUD catalog/trip, profile, auth (đổi/đặt lại mật khẩu, logout), booking, hoàn tiền và đổi role |
+| API | Quan sát thành công toàn bộ 38 method–path của controller hiện tại; CRUD catalog/trip, profile, auth (đổi/đặt lại mật khẩu, logout), booking, hoàn tiền và đổi role |
 | Business | Lọc ngày/tuyến, dữ liệu rỗng/sai, giá × quantity, history, ownership, hủy booking/hủy chuyến đúng chính sách hiện tại |
 | Security | Thiếu token/sai role trên admin surface, USER-only booking/history, role đổi có hiệu lực với token cũ, inactive bị từ chối, profile không tự nâng role |
 | Rate limit | Giữ nguyên default: 10 login sai rồi request thứ 11 nhận 429; không tăng giới hạn để làm đẹp baseline |
@@ -141,7 +141,7 @@ Artifact chính:
 
 Latency dùng cohort request **bắt đầu** trong measure, gồm cả completion trong drain và timeout. RPS completed tính completion trong cửa sổ; pending/cross-boundary không bị lẳng lặng xóa. Trial bị abort/incomplete không có RPS so sánh trong biểu đồ. Không lấy trung bình các p95 worker.
 
-Exit code **0** chỉ khi đủ inventory chức năng, architecture/37 endpoint, các workload được xác nhận, recovery và spike/soak đạt, profile acceptance đầy đủ. Exit **2** là FAIL/UNKNOWN/incomplete; artifact vẫn được xuất. Bất kỳ kết quả giảm scope, hết budget, thiếu case, skipped fault, thiếu confirmation đều không được báo full PASS.
+Exit code **0** chỉ khi đủ inventory chức năng, architecture/38 endpoint, các workload được xác nhận, recovery và spike/soak đạt, profile acceptance đầy đủ. Exit **2** là FAIL/UNKNOWN/incomplete; artifact vẫn được xuất. Bất kỳ kết quả giảm scope, hết budget, thiếu case, skipped fault, thiếu confirmation đều không được báo full PASS.
 
 Suite tạo ZIP checkpoint sau nhóm chức năng và sau mỗi workload. Nếu bị ngắt, có thể xuất lại mọi artifact đã có mà không khởi động dịch vụ:
 

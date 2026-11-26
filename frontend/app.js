@@ -12,6 +12,7 @@ function duration(t) {
 }
 
 const STATUS = {
+  HELD: ['Đang giữ chỗ', 'warn'], EXPIRED: ['Hết hạn giữ chỗ', ''],
   SCHEDULED: ['Sắp khởi hành', 'ok'], IN_PROGRESS: ['Đang chạy', 'info'], COMPLETED: ['Đã hoàn thành', ''],
   CANCELLED: ['Đã huỷ', 'err'], CONFIRMED: ['Đã xác nhận', 'ok'], REFUND_PENDING: ['Chờ hoàn tiền', 'warn'], REFUNDED: ['Đã hoàn tiền', ''],
 };
@@ -219,8 +220,7 @@ function openBooking(t) {
   $('#book-trip').textContent = t.id;
   $('#book-route').textContent = `${t.origin} → ${t.destination}`;
   $('#book-when').textContent = `${day(t.departureTime)} · ${clock(t.departureTime)} · ${t.operatorName}`;
-  $('#book-step').hidden = false;
-  $('#book-done').hidden = true;
+  bookStep('step');
   updateTotal();
   $('#book-dialog').showModal();
 }
@@ -245,15 +245,68 @@ $('#book-form').addEventListener('submit', async (e) => {
   try {
     const b = await api('/bookings', { method: 'POST', body, idempotencyKey: pendingBooking.key });
     pendingBooking = null;
-    $('#done-code').textContent = b.bookingCode;
-    $('#done-summary').textContent = `${b.quantity} ghế · ${money(b.totalAmount)} · ${bookingTrip.origin} → ${bookingTrip.destination}, ${clock(bookingTrip.departureTime)} ${day(bookingTrip.departureTime)}`;
-    $('#book-step').hidden = true;
-    $('#book-done').hidden = false;
+    startHold(b);
     loadTrips();
   } catch (err) { toast(err.message, true); }
   finally { submit.disabled = false; }
 });
 $('#go-bookings').addEventListener('click', () => { $('#book-dialog').close(); show('bookings'); });
+
+// ---------- Seat hold: HELD until confirmed, or EXPIRED after the deadline ----------
+const bookStep = (name) => ['step', 'hold', 'done'].forEach((s) => ($('#book-' + s).hidden = s !== name));
+let heldBooking = null;
+
+function startHold(b) {
+  heldBooking = b;
+  // Count down from the server's own hold length, so browser clock and timezone don't matter.
+  const deadline = Date.now() + (new Date(b.holdExpiresAt) - new Date(b.bookedAt));
+  $('#hold-total').textContent = `${b.quantity} ghế · ${money(b.totalAmount)}`;
+  $('#hold-confirm').disabled = false;
+  $('#hold-note').textContent = 'Xác nhận trước khi hết giờ, nếu không ghế sẽ được trả lại cho chuyến.';
+  clearInterval(startHold.timer);
+  const tick = () => {
+    const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+    $('#hold-countdown').textContent = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+    if (left === 0) { clearInterval(startHold.timer); holdLapsed(); }
+  };
+  tick();
+  startHold.timer = setInterval(tick, 1000);
+  bookStep('hold');
+}
+
+function holdLapsed() {
+  $('#hold-confirm').disabled = true;
+  $('#hold-note').textContent = 'Hết thời gian giữ chỗ, ghế đã được trả lại. Chọn chuyến để đặt lại.';
+}
+
+function showDone(b) {
+  clearInterval(startHold.timer);
+  $('#done-code').textContent = b.bookingCode;
+  $('#done-summary').textContent = `${b.quantity} ghế · ${money(b.totalAmount)} · ${bookingTrip.origin} → ${bookingTrip.destination}, ${clock(bookingTrip.departureTime)} ${day(bookingTrip.departureTime)}`;
+  bookStep('done');
+}
+
+const confirmBooking = (id) => api(`/bookings/${id}/confirm`, { method: 'POST' }).catch((err) => {
+  if (err.status === 409) throw new Error('Hết thời gian giữ chỗ, ghế đã được trả lại. Vui lòng đặt lại.');
+  throw err;
+});
+
+$('#hold-confirm').addEventListener('click', async (e) => {
+  e.currentTarget.disabled = true;
+  try { showDone(await confirmBooking(heldBooking.id)); }
+  catch (err) { toast(err.message, true); if (/Hết thời gian/.test(err.message)) holdLapsed(); else e.currentTarget.disabled = false; }
+});
+
+$('#hold-release').addEventListener('click', async () => {
+  try {
+    await api('/bookings/' + heldBooking.id, { method: 'DELETE' });
+    clearInterval(startHold.timer);
+    $('#book-dialog').close();
+    toast('Đã huỷ giữ chỗ');
+    loadTrips();
+  } catch (err) { toast(err.message, true); }
+});
+$('#book-dialog').addEventListener('close', () => clearInterval(startHold.timer));
 
 // ---------- My bookings ----------
 async function loadBookings(page = bookingPage) {
@@ -272,7 +325,8 @@ async function loadBookings(page = bookingPage) {
         <td class="num">${money(b.totalAmount)}</td>
         <td>${chip(b.status)}</td>
         <td>${time(b.bookedAt)}</td>
-        <td>${b.status === 'CONFIRMED' ? `<button class="ghost danger" data-cancel="${b.id}">Huỷ vé</button>` : ''}</td>
+        <td><div class="row-actions">${b.status === 'HELD' ? `<button class="primary" data-confirm="${b.id}">Xác nhận</button>` : ''}${
+          b.status === 'CONFIRMED' || b.status === 'HELD' ? `<button class="ghost danger" data-cancel="${b.id}">Huỷ vé</button>` : ''}</div></td>
       </tr>`).join('') || '<tr><td colspan="8" class="empty-cell">Bạn chưa đặt vé nào. Vào Tìm chuyến để chọn chuyến đầu tiên.</td></tr>';
   } catch (err) { if (request === bookingRequest && token) toast(err.message, true); }
 }
@@ -280,6 +334,11 @@ $('#booking-prev').addEventListener('click', () => loadBookings(bookingPage - 1)
 $('#booking-next').addEventListener('click', () => loadBookings(bookingPage + 1));
 
 $('#bookings').addEventListener('click', async (e) => {
+  if (e.target.dataset.confirm) {
+    try { await confirmBooking(e.target.dataset.confirm); toast('Đã xác nhận vé'); }
+    catch (err) { toast(err.message, true); }
+    return loadBookings();
+  }
   const id = e.target.dataset.cancel;
   if (!id || !confirm('Huỷ vé này?')) return;
   try {

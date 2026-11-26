@@ -64,7 +64,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void create_whenValid_shouldSaveConfirmedBookingAndDecreaseSeats() {
+    void create_whenValid_shouldHoldSeatsForTenMinutes() {
         when(tripRepository.reserveSeats(eq(TRIP_ID), eq(2), any())).thenReturn(
                 Optional.of(new TripRepository.SeatReservation(new BigDecimal("150000"), future)));
 
@@ -82,7 +82,8 @@ class BookingServiceTest {
         assertEquals(2, newBooking.getQuantity());
         assertEquals(new BigDecimal("150000"), newBooking.getUnitPrice());
         assertEquals(new BigDecimal("300000"), newBooking.getTotalAmount());
-        assertEquals(BookingStatus.CONFIRMED, newBooking.getStatus());
+        assertEquals(BookingStatus.HELD, newBooking.getStatus());
+        assertEquals(newBooking.getBookedAt().plusMinutes(10), newBooking.getHoldExpiresAt());
         assertNotNull(newBooking.getBookingCode());
         assertTrue(newBooking.getBookingCode().startsWith("BK-"));
         verify(tripRepository, never()).findReservationForUpdate(TRIP_ID);
@@ -378,5 +379,92 @@ class BookingServiceTest {
 
         assertSame(cancelled, bookingService.create(USER_ID, TRIP_ID, "Nguyen Van A", "0901234567", 2, "retry"));
         verify(tripRepository, never()).reserveSeats(anyLong(), anyInt(), any());
+    }
+
+    // Clock is 2026-01-01T00:00Z, i.e. 07:00 in Vietnam.
+    private Booking held(java.time.LocalDateTime holdExpiresAt) {
+        return new Booking(BOOKING_ID, "BK-1", USER_ID, TRIP_ID, "Nguyen Van A", "0901234567", 1,
+                new BigDecimal("150000"), new BigDecimal("150000"), BookingStatus.HELD,
+                java.time.LocalDateTime.of(2026, 1, 1, 6, 55), holdExpiresAt);
+    }
+
+    @Test
+    void confirm_whenHoldIsRunning_shouldConfirm() {
+        Booking confirmed = mock(Booking.class);
+        Trip trip = mock(Trip.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(held(java.time.LocalDateTime.of(2026, 1, 1, 7, 5))));
+        when(tripRepository.findById(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
+        when(trip.getDepartureTime()).thenReturn(future);
+        when(bookingRepository.confirm(BOOKING_ID)).thenReturn(confirmed);
+
+        assertSame(confirmed, bookingService.confirm(USER_ID, false, BOOKING_ID));
+    }
+
+    @Test
+    void confirm_whenHoldDeadlineHasPassed_shouldRejectAsExpiredBeforeTheJobRuns() {
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(held(java.time.LocalDateTime.of(2026, 1, 1, 7, 0))));
+
+        assertThrows(com.example.busbooking.domain.exception.HoldExpiredException.class,
+                () -> bookingService.confirm(USER_ID, false, BOOKING_ID));
+        verify(bookingRepository, never()).confirm(anyLong());
+    }
+
+    @Test
+    void confirm_whenHoldAlreadyExpired_shouldRejectAsExpired() {
+        Booking expired = mock(Booking.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(expired));
+        when(expired.getUserId()).thenReturn(USER_ID);
+        when(expired.getStatus()).thenReturn(BookingStatus.EXPIRED);
+
+        assertThrows(com.example.busbooking.domain.exception.HoldExpiredException.class,
+                () -> bookingService.confirm(USER_ID, false, BOOKING_ID));
+    }
+
+    @Test
+    void confirm_whenAlreadyConfirmed_shouldReturnBookingUnchanged() {
+        Booking booking = mock(Booking.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(booking.getUserId()).thenReturn(USER_ID);
+        when(booking.getStatus()).thenReturn(BookingStatus.CONFIRMED);
+
+        assertSame(booking, bookingService.confirm(USER_ID, false, BOOKING_ID));
+        verify(bookingRepository, never()).confirm(anyLong());
+    }
+
+    @Test
+    void confirm_whenAnotherUsersHold_shouldThrowForbidden() {
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(held(java.time.LocalDateTime.of(2026, 1, 1, 7, 5))));
+
+        assertThrows(ForbiddenOperationException.class, () -> bookingService.confirm(99L, false, BOOKING_ID));
+        verify(bookingRepository, never()).confirm(anyLong());
+    }
+
+    @Test
+    void confirm_whenTripWasCancelled_shouldReject() {
+        Trip trip = mock(Trip.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(held(java.time.LocalDateTime.of(2026, 1, 1, 7, 5))));
+        when(tripRepository.findById(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getStatus()).thenReturn(TripStatus.CANCELLED);
+
+        assertThrows(BusinessException.class, () -> bookingService.confirm(USER_ID, false, BOOKING_ID));
+        verify(bookingRepository, never()).confirm(anyLong());
+    }
+
+    @Test
+    void cancel_whenHoldIsRunning_shouldReleaseSeats() {
+        Trip trip = mock(Trip.class);
+        Booking cancelled = mock(Booking.class);
+        when(bookingRepository.findByIdForUpdate(BOOKING_ID)).thenReturn(Optional.of(held(java.time.LocalDateTime.of(2026, 1, 1, 7, 5))));
+        when(tripRepository.findByIdForUpdate(TRIP_ID)).thenReturn(Optional.of(trip));
+        when(trip.getDepartureTime()).thenReturn(future);
+        when(trip.getStatus()).thenReturn(TripStatus.SCHEDULED);
+        when(trip.getAvailableSeats()).thenReturn(5);
+        when(trip.getVehicle()).thenReturn(new VehicleSummary("SLEEPER", 40, "Operator"));
+        when(tripRepository.updateAvailableSeats(TRIP_ID, 1)).thenReturn(true);
+        when(bookingRepository.updateStatus(BOOKING_ID, BookingStatus.CANCELLED)).thenReturn(cancelled);
+
+        assertSame(cancelled, bookingService.cancel(USER_ID, false, BOOKING_ID));
+        verify(tripRepository).updateAvailableSeats(TRIP_ID, 1);
     }
 }

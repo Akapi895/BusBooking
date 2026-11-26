@@ -1,0 +1,10 @@
+# Several backends behind the frontend Nginx, auth rate limit shared through Redis:
+#   docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml up -d --scale backend=3
+# Add -f compose.observability.yaml for Prometheus/Grafana (it discovers every replica by DNS).
+# Nginx resolves "backend" once at start-up and round-robins over the replicas it found,
+# so restart the frontend service after changing the replica count.
+services:
+  backend:
+    # Replicas cannot share a container name or host ports; reach them through Nginx (port 5173).
+    container_name: !reset null
+    ports: !reset []

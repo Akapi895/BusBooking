@@ -1,0 +1,7 @@
+# Booking contention shows up as transactions waiting on a trip's row lock.
+pg_lock_waits:
+  query: "SELECT count(*) AS waiting FROM pg_locks WHERE NOT granted"
+  metrics:
+    - waiting:
+        usage: GAUGE
+        description: Lock requests currently waiting to be granted

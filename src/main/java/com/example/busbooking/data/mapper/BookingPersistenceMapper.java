@@ -10,7 +10,7 @@ public class BookingPersistenceMapper {
         return entity == null ? null : new Booking(entity.getId(), entity.getBookingCode(),
                 entity.getUserId(), entity.getTripId(), entity.getPassengerName(),
                 entity.getPassengerPhone(), entity.getQuantity(), entity.getUnitPrice(),
-                entity.getTotalAmount(), entity.getStatus(), entity.getBookedAt());
+                entity.getTotalAmount(), entity.getStatus(), entity.getBookedAt(), entity.getHoldExpiresAt());
     }
 
     public BookingEntity toEntity(Booking booking) {
@@ -32,6 +32,7 @@ public class BookingPersistenceMapper {
         entity.setTotalAmount(booking.getTotalAmount());
         entity.setStatus(booking.getStatus());
         entity.setBookedAt(booking.getBookedAt());
+        entity.setHoldExpiresAt(booking.getHoldExpiresAt());
         return entity;
     }
 }

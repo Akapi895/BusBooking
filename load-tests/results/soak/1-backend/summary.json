@@ -1,0 +1,220 @@
+{
+  "label": "1-backend",
+  "started_utc": "2026-11-26T06:21:16.419313+00:00",
+  "duration_minutes": 30.1,
+  "load": {
+    "users": 300,
+    "spawn_rate": 30.0,
+    "think_seconds": [
+      0.2,
+      0.6
+    ],
+    "abandon_ratio": 0.15,
+    "cancel_ratio": 0.1
+  },
+  "locust": {
+    "DELETE /api/bookings/{id}": {
+      "Request Count": 2194.0,
+      "Failure Count": 0.0,
+      "Requests/s": 1.2185793705017256,
+      "50%": 30.0,
+      "95%": 240.0,
+      "99%": 390.0,
+      "Max Response Time": 662.9613999975845
+    },
+    "GET /api/trips?filter": {
+      "Request Count": 852202.0,
+      "Failure Count": 0.0,
+      "Requests/s": 473.32533122165523,
+      "50%": 7.0,
+      "95%": 59.0,
+      "99%": 210.0,
+      "Max Response Time": 1299.2141000067932
+    },
+    "GET /api/users/me/bookings": {
+      "Request Count": 141478.0,
+      "Failure Count": 0.0,
+      "Requests/s": 78.57892989053926,
+      "50%": 6.0,
+      "95%": 54.0,
+      "99%": 210.0,
+      "Max Response Time": 1326.4942000023439
+    },
+    "POST /api/bookings": {
+      "Request Count": 52358.0,
+      "Failure Count": 0.0,
+      "Requests/s": 29.08039137681374,
+      "50%": 15.0,
+      "95%": 180.0,
+      "99%": 360.0,
+      "Max Response Time": 1027.6972999999998
+    },
+    "POST /api/bookings/{id}/confirm": {
+      "Request Count": 21543.0,
+      "Failure Count": 0.0,
+      "Requests/s": 11.965294156207236,
+      "50%": 24.0,
+      "95%": 230.0,
+      "99%": 410.0,
+      "Max Response Time": 1306.4744000002975
+    },
+    "Aggregated": {
+      "Request Count": 1069775.0,
+      "Failure Count": 0.0,
+      "Requests/s": 594.1685260157171,
+      "50%": 7.0,
+      "95%": 69.0,
+      "99%": 240.0,
+      "Max Response Time": 1326.4942000023439
+    }
+  },
+  "p95_drift": {
+    "p95_ms_first_minutes": 158.0,
+    "p95_ms_last_minutes": 9.9,
+    "window_minutes": 5
+  },
+  "statuses": {
+    "DELETE /api/bookings/{id} 200": 2194,
+    "GET /api/trips?filter 200": 852202,
+    "GET /api/users/me/bookings 200": 141478,
+    "POST /api/bookings 201": 25340,
+    "POST /api/bookings 409": 26002,
+    "POST /api/bookings 503": 1016,
+    "POST /api/bookings/{id}/confirm 200": 21543
+  },
+  "oracle": {
+    "seat_mismatches": 0,
+    "seat_mismatch_examples": [],
+    "stale_holds": 0,
+    "money_mismatches": 0,
+    "booking_statuses": {
+      "HELD": 103,
+      "EXPIRED": 3694,
+      "CANCELLED": 2194,
+      "CONFIRMED": 19349
+    },
+    "status": "PASS"
+  },
+  "prometheus": {
+    "requests_per_second": {
+      "total": {
+        "first": 302.0138041666667,
+        "last": 580.8727272727273,
+        "max": 791.3522555775769,
+        "mean": 589.2657205294929
+      }
+    },
+    "requests_per_second_by_instance": {
+      "instance=172.20.0.5:8081": {
+        "first": 302.0138041666667,
+        "last": 580.8727272727273,
+        "max": 791.3522555775769,
+        "mean": 589.2657205294929
+      }
+    },
+    "server_errors_per_second": {
+      "total": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      }
+    },
+    "hikari_pending": {
+      "total": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 52.0,
+        "mean": 1.9836065573770492
+      }
+    },
+    "hikari_active": {
+      "total": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 10.0,
+        "mean": 3.0655737704918034
+      }
+    },
+    "pg_lock_waits": {
+      "__name__=pg_lock_waits_waiting instance=postgres-exporter:9187 job=postgres server=postgres:5432": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      }
+    },
+    "heap_bytes_by_instance": {
+      "instance=172.20.0.5:8081": {
+        "first": 71772360.0,
+        "last": 144000856.0,
+        "max": 252772952.0,
+        "mean": 163910613.63934427
+      }
+    },
+    "p95_seconds_by_endpoint": {
+      "method=DELETE uri=/api/bookings/{bookingId}": {
+        "first": 0.050344977548560016,
+        "last": 0.00831870195,
+        "max": 0.3869944486249998,
+        "mean": 0.06686458050403668
+      },
+      "method=GET uri=/api/trips": {
+        "first": 0.042397763165995625,
+        "last": 0.0027435728168850376,
+        "max": 0.41413929922755083,
+        "mean": 0.033622307092165335
+      },
+      "method=GET uri=/api/users/me/bookings": {
+        "first": 0.031094733247204586,
+        "last": 0.0022258900723981893,
+        "max": 0.4015619824634148,
+        "mean": 0.030493956016432285
+      },
+      "method=POST uri=/api/bookings": {
+        "first": 0.049474827490166406,
+        "last": 0.0036760629711538456,
+        "max": 0.41025593059150367,
+        "mean": 0.03987308329410547
+      },
+      "method=POST uri=/api/bookings/{bookingId}/confirm": {
+        "first": 0.04582522182178421,
+        "last": 0.00312824975,
+        "max": 0.42145226905048083,
+        "mean": 0.05179177540853309
+      }
+    },
+    "p99_seconds_by_endpoint": {
+      "method=DELETE uri=/api/bookings/{bookingId}": {
+        "first": 0.08952114595729972,
+        "last": 0.008374625989999999,
+        "max": 0.5562579160833331,
+        "mean": 0.10434230649096841
+      },
+      "method=GET uri=/api/trips": {
+        "first": 0.13046554533834875,
+        "last": 0.0033175577003105583,
+        "max": 0.582522369223702,
+        "mean": 0.060822595559442444
+      },
+      "method=GET uri=/api/users/me/bookings": {
+        "first": 0.10108789859893952,
+        "last": 0.0027040405306122416,
+        "max": 0.5686854834444451,
+        "mean": 0.054875763110929544
+      },
+      "method=POST uri=/api/bookings": {
+        "first": 0.12096938261884511,
+        "last": 0.004171743556363634,
+        "max": 0.6006831989868432,
+        "mean": 0.06996201048556289
+      },
+      "method=POST uri=/api/bookings/{bookingId}/confirm": {
+        "first": 0.10570557610428738,
+        "last": 0.0031422307500000002,
+        "max": 0.6154777600725013,
+        "mean": 0.08989324835536404
+      }
+    }
+  }
+}

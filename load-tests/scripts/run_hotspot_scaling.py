@@ -180,7 +180,7 @@ def scenario(jar, root, admin, clients, backend_count):
         with runtime.connect() as connection:
             available = connection.execute("SELECT available_seats FROM trips WHERE id = %s", (trip_id,)).fetchone()[0]
             ids = [row[0] for row in connection.execute(
-                "SELECT id FROM bookings WHERE trip_id = %s AND status = 'CONFIRMED'", (trip_id,)
+                "SELECT id FROM bookings WHERE trip_id = %s AND status IN ('HELD', 'CONFIRMED')", (trip_id,)
             ).fetchall()]
         return summarize(rows, elapsed, available, ids)
 

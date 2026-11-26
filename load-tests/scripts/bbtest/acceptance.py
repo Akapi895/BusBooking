@@ -80,7 +80,7 @@ class Acceptance:
     def counts(self, trip):
         with self.rt.connect() as conn:
             return conn.execute("SELECT t.available_seats,count(b.id),coalesce(sum(b.quantity) FILTER "
-                "(WHERE b.status='CONFIRMED'),0),t.status FROM trips t LEFT JOIN bookings b ON b.trip_id=t.id "
+                "(WHERE b.status IN ('HELD','CONFIRMED')),0),t.status FROM trips t LEFT JOIN bookings b ON b.trip_id=t.id "
                 "WHERE t.id=%s GROUP BY t.id", (trip,)).fetchone()
 
     def burst(self, actions):
@@ -182,7 +182,9 @@ class Acceptance:
         self.request("GET", "/api/admin/trips?status=SCHEDULED", "ADMIN", expected=200)
         self.request("GET", f"/api/trips/{trip['id']}", None, expected=200)
         _, booking = self.book(trip["id"], quantity=2, expected=201)
-        assert booking_valid(booking, 0, trip["id"], 2, 175000)
+        assert booking_valid(booking, 0, trip["id"], 2, 175000) and booking["status"] == "HELD"
+        _, confirmed = self.request("POST", f"/api/bookings/{booking['id']}/confirm", expected=200)
+        assert confirmed["status"] == "CONFIRMED"
         self.request("GET", f"/api/bookings/{booking['id']}", expected=200)
         self.request("GET", f"/api/bookings/{booking['id']}", self.fx.data["users"][0], expected=403)
         _, history = self.request("GET", "/api/users/me/bookings", expected=200)
@@ -193,6 +195,7 @@ class Acceptance:
         assert again["status"] == "CANCELLED" and self.counts(trip["id"])[0] == 40
         # Cancelling a trip with a confirmed booking queues a refund and a notice email.
         _, booked = self.book(trip["id"], quantity=1, expected=201)
+        self.request("POST", f"/api/bookings/{booked['id']}/confirm", expected=200)
         self.request("DELETE", f"/api/admin/trips/{trip['id']}", "ADMIN", expected=200)
         self.request("DELETE", f"/api/admin/trips/{trip['id']}", "ADMIN", expected=200)
         assert self.counts(trip["id"])[0] == 40
