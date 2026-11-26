@@ -56,6 +56,21 @@ jobs:
           package-manager-cache: false
       - run: node --check frontend/app.js
 
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      # Catches a broken Dockerfile or compose file that the Maven tests would not.
+      - run: docker build -t busbooking:ci .
+      - run: docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml -f compose.observability.yaml -f compose.tls.yaml config --quiet
+        env:
+          DB_PASSWORD: ci
+          JWT_SECRET: ci
+          EMAIL_OTP_SECRET: ci
+          OTP_OUTBOX_SECRET: ci
+
   load-harness:
     runs-on: ubuntu-latest
     steps:

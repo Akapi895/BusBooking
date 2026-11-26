@@ -1,0 +1,9 @@
+{
+  "DELETE /api/bookings/{id} 200": 529,
+  "GET /api/trips?filter 200": 214487,
+  "GET /api/users/me/bookings 200": 35719,
+  "POST /api/bookings 201": 6308,
+  "POST /api/bookings 409": 6511,
+  "POST /api/bookings 503": 40,
+  "POST /api/bookings/{id}/confirm 200": 5384
+}

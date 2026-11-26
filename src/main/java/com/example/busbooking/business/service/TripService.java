@@ -60,18 +60,18 @@ public class TripService {
                 || !current.getDepartureTime().equals(command.departureTime())
                 || !current.getArrivalTime().equals(command.arrivalTime());
         boolean vehicleChanged = !current.getVehicleId().equals(command.vehicleId());
-        long confirmedSeats = itineraryChanged || vehicleChanged ? bookingRepository.countConfirmedSeats(tripId) : 0;
-        if (itineraryChanged && confirmedSeats > 0) {
+        long takenSeats = itineraryChanged || vehicleChanged ? bookingRepository.countTakenSeats(tripId) : 0;
+        if (itineraryChanged && takenSeats > 0) {
             throw new TripConflictException("The route and times cannot change after seats have been booked");
         }
         if (itineraryChanged || vehicleChanged) requireAvailableVehicle(tripId, command);
         int availableSeats = current.getAvailableSeats();
         if (vehicleChanged) {
             // Booking creation/cancellation takes this same trip lock before changing seats/status.
-            if (confirmedSeats > vehicle.seatCapacity()) {
+            if (takenSeats > vehicle.seatCapacity()) {
                 throw new TripConflictException("Vehicle capacity is smaller than confirmed booked seats");
             }
-            availableSeats = vehicle.seatCapacity() - (int) confirmedSeats;
+            availableSeats = vehicle.seatCapacity() - (int) takenSeats;
         }
         return tripRepository.save(new Trip(tripId, command.routeId(), command.vehicleId(),
                 command.departureTime(), command.arrivalTime(), command.price(), availableSeats, current.getStatus()));
@@ -90,11 +90,13 @@ public class TripService {
         // Confirmed bookings become refunds owed; each customer is emailed through the notice outbox.
         // shortcut: locks trip then bookings, the reverse of booking cancellation; a rare deadlock
         // surfaces as a retryable 503. Lock the trip first in booking cancellation if it shows up.
-        long confirmedSeats = bookingRepository.countConfirmedSeats(tripId);
-        if (confirmedSeats > 0) bookingRepository.markTripRefundPending(tripId, clock.instant());
+        long takenSeats = bookingRepository.countTakenSeats(tripId);
+        // Holds go first: a confirmation racing this cancellation then lands before the refund update and is refunded.
+        bookingRepository.cancelTripHolds(tripId);
+        if (takenSeats > 0) bookingRepository.markTripRefundPending(tripId, clock.instant());
         return tripRepository.save(new Trip(tripId, current.getRouteId(), current.getVehicleId(),
                 current.getDepartureTime(), current.getArrivalTime(), current.getPrice(),
-                current.getAvailableSeats() + (int) confirmedSeats, TripStatus.CANCELLED));
+                current.getAvailableSeats() + (int) takenSeats, TripStatus.CANCELLED));
     }
 
     private void requireScheduled(Trip trip) {

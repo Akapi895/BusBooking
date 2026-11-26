@@ -1,0 +1,55 @@
+# Metrics stack. Use on top of compose.yaml (and compose.scale.yaml for 3 backends):
+#   docker compose -f compose.yaml -f compose.observability.yaml up -d
+# Prometheus: http://127.0.0.1:9090 · Grafana: http://127.0.0.1:3000 (dashboard "BusBooking")
+services:
+  postgres:
+    # Lock waits longer than deadlock_timeout (1 s) are written to the server log.
+    command: ["postgres", "-c", "log_lock_waits=on"]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: busbooking-prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - backend
+      - postgres-exporter
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: busbooking-postgres-exporter
+    environment:
+      DATA_SOURCE_URI: postgres:5432/busbooking_dev_fresh?sslmode=disable
+      DATA_SOURCE_USER: busbooking_user
+      DATA_SOURCE_PASS: ${DB_PASSWORD:?DB_PASSWORD_required}
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+    volumes:
+      - ./observability/postgres-exporter-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: busbooking-grafana
+    environment:
+      # Local-only dashboard (bound to loopback): open it without a login.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/busbooking.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:

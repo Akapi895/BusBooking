@@ -18,7 +18,7 @@ Trạng thái: **Đạt** · **Một phần** (đạt cốt lõi, còn giới h�
 
 | Đặc tính | Trạng thái | Bằng chứng |
 |---|---|---|
-| Phù hợp chức năng | Đạt | 314 test JUnit, gồm test tích hợp trên PostgreSQL thật (`src/test/java/.../integration`, `.../api`) |
+| Phù hợp chức năng | Đạt | 326 test JUnit, gồm test tích hợp trên PostgreSQL thật (`src/test/java/.../integration`, `.../api`) |
 | Hiệu năng | Một phần | SLO và kịch bản tải trong `load-tests/config/acceptance.yaml`, `load-tests/ACCEPTANCE.md`; kết quả trước/sau ở `load-tests/results/phase2-before-after.json`. Chưa có lượt acceptance đầy đủ sau các thay đổi auth |
 | Tương thích | Đạt | REST + JSON, mô tả OpenAPI qua springdoc; chạy bằng Docker Compose |
 | Tương tác (giao diện) | Một phần | Frontend demo tĩnh (`frontend/`); trọng số thấp theo phạm vi đề tài |
@@ -38,7 +38,7 @@ Trạng thái: **Đạt** · **Một phần** (đạt cốt lõi, còn giới h�
 | API5 Broken Function Level Authorization | Đạt | Quy tắc theo method + path, mặc định `denyAll` (`SecurityConfig`) |
 | API6 Unrestricted Access to Sensitive Business Flows | Một phần | Có giới hạn đăng nhập/OTP; chưa giới hạn số vé mỗi tài khoản (một tài khoản đặt được cả chuyến) |
 | API7 SSRF | Không áp dụng | API không gọi URL do người dùng cung cấp |
-| API8 Security Misconfiguration | Một phần | CORS chỉ nhận origin cụ thể; Swagger tắt mặc định; Actuator loopback, `show-details=never`. Nginx frontend chưa đặt header bảo mật (CSP, HSTS) |
+| API8 Security Misconfiguration | Một phần | CORS chỉ nhận origin cụ thể; Swagger tắt mặc định; Actuator loopback, `show-details=never`; Nginx gửi CSP, `X-Content-Type-Options`, `Referrer-Policy` (`frontend/nginx-app.conf`), HTTPS + HSTS qua `compose.tls.yaml`; Compose chỉ publish DB, backend, Mailpit trên loopback. Chứng chỉ TLS do người triển khai cung cấp |
 | API9 Improper Inventory Management | Một phần | OpenAPI sinh tự động đúng; `docs/openapi.json` bản lưu đã cũ |
 | API10 Unsafe Consumption of APIs | Không áp dụng | Chỉ dùng SMTP, PostgreSQL, Redis nội bộ |
 
@@ -93,7 +93,7 @@ Trạng thái: **Đạt** · **Một phần** (đạt cốt lõi, còn giới h�
 |---|---|---|---|
 | 1 | Đăng ký không lộ email đã tồn tại (trả cùng phản hồi, gửi email báo cho chủ tài khoản) | ASVS, API2 | Trung bình |
 | 2 | Rút ngắn thời hạn access token, thêm refresh token | RFC 8725, ASVS | Trung bình |
-| 3 | Header bảo mật cho Nginx frontend (CSP, HSTS khi có HTTPS, `X-Content-Type-Options`) | API8 | Trung bình |
+| 3 | ~~Header bảo mật cho Nginx frontend~~ Đã làm: `frontend/nginx-app.conf`, `compose.tls.yaml` | API8 | Xong |
 | 4 | Giới hạn số vé mỗi tài khoản cho một chuyến | API6 | Cần chốt nghiệp vụ |
 | 5 | Đưa log `security.audit` vào kho log tập trung có thời hạn lưu | ASVS (ghi log) | Thấp |
 | 6 | Cập nhật `docs/openapi.json` từ `/v3/api-docs` | API9 | Thấp |

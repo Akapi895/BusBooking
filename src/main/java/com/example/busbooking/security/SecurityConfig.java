@@ -83,6 +83,7 @@ public class SecurityConfig {
                     access.requestMatchers(HttpMethod.PUT, "/api/users/me/password").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
                     access.requestMatchers(HttpMethod.GET, "/api/users/me/bookings").hasRole("USER");
                     access.requestMatchers(HttpMethod.POST, "/api/bookings").hasRole("USER");
+                    access.requestMatchers(HttpMethod.POST, "/api/bookings/{id}/confirm").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
                     access.requestMatchers(HttpMethod.GET, "/api/bookings/{id}").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
                     access.requestMatchers(HttpMethod.DELETE, "/api/bookings/{id}").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN");
                     access.requestMatchers("/api/admin/users/{userId}/role").hasRole("SUPER_ADMIN");

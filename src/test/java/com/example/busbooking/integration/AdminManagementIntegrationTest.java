@@ -227,7 +227,7 @@ class AdminManagementIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT vehicle_id FROM trips WHERE id = ?", Long.class, id)).isEqualTo(vehicle);
         assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, id)).isEqualTo(6);
         assertThat(jdbc.queryForObject("SELECT price FROM trips WHERE id = ?", java.math.BigDecimal.class, id)).isEqualByComparingTo("150000");
-        assertThat(bookings.get(user, false, booking.getId()).getStatus().name()).isEqualTo("CONFIRMED");
+        assertThat(bookings.get(user, false, booking.getId()).getStatus().name()).isEqualTo("HELD");
     }
 
     @Test void updateChecksAuthMissingInvalidReferencesAndTripState() throws Exception {
@@ -305,11 +305,12 @@ class AdminManagementIntegrationTest {
         }
     }
 
-    void assertSeatInvariant(Long tripId, int capacity, int confirmedSeats) {
+    /** Free seats plus held and confirmed seats always add up to the vehicle's capacity. */
+    void assertSeatInvariant(Long tripId, int capacity, int takenSeats) {
         assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId))
-                .isEqualTo(capacity - confirmedSeats);
-        assertThat(jdbc.queryForObject("SELECT COALESCE(SUM(quantity), 0) FROM bookings WHERE trip_id = ? AND status = 'CONFIRMED'", Long.class, tripId))
-                .isEqualTo(confirmedSeats);
+                .isEqualTo(capacity - takenSeats);
+        assertThat(jdbc.queryForObject("SELECT COALESCE(SUM(quantity), 0) FROM bookings WHERE trip_id = ? AND status IN ('HELD', 'CONFIRMED')", Long.class, tripId))
+                .isEqualTo(takenSeats);
     }
 
     @Test @Tag("concurrency") void bookingWaitsForVehicleChangeAndCannotOversellNewCapacity() throws Exception {
@@ -367,19 +368,20 @@ class AdminManagementIntegrationTest {
         assertSeatInvariant(id, 10, 0);
     }
 
-    @Test @Tag("concurrency") void cancellationWaitsForBookingAndThenRefundsIt() throws Exception {
+    @Test @Tag("concurrency") void cancellationWaitsForHoldAndThenCancelsIt() throws Exception {
         Long id = createTrip();
         Throwable failure = compete(() -> bookings.create(user, id, "Passenger", "0901234567", 1),
                 () -> trips.cancel(id));
         assertThat(failure).isNull();
         assertThat(jdbc.queryForObject("SELECT status FROM trips WHERE id = ?", String.class, id)).isEqualTo("CANCELLED");
-        assertThat(jdbc.queryForObject("SELECT status FROM bookings WHERE trip_id = ?", String.class, id)).isEqualTo("REFUND_PENDING");
+        // An unconfirmed hold was never paid for, so it is cancelled rather than refunded.
+        assertThat(jdbc.queryForObject("SELECT status FROM bookings WHERE trip_id = ?", String.class, id)).isEqualTo("CANCELLED");
         assertSeatInvariant(id, 10, 0);
     }
 
     @Test void cancellingTripWithBookingsQueuesNoticesAndTracksManualRefunds() throws Exception {
         Long id = createTrip();
-        var booking = bookings.create(user, id, "Passenger", "0901234567", 2);
+        var booking = bookings.confirm(user, false, bookings.create(user, id, "Passenger", "0901234567", 2).getId());
         mvc.perform(delete("/api/admin/trips/" + id).header("Authorization", token(admin)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
         assertSeatInvariant(id, 10, 0);
@@ -414,7 +416,7 @@ class AdminManagementIntegrationTest {
 
     @Test void adminBookingListIncludesMultipleUsersAndCombinesFiltersWithoutSecrets() throws Exception {
         Long id = createTrip();
-        var first = bookings.create(user, id, "First", "0901234567", 2);
+        var first = bookings.confirm(user, false, bookings.create(user, id, "First", "0901234567", 2).getId());
         var second = bookings.create(otherUser, id, "Second", "0901234567", 1);
         bookings.cancel(otherUser, false, second.getId());
         for (Long actor : List.of(admin, superAdmin)) {

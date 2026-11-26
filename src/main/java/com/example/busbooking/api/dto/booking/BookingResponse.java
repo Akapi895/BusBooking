@@ -14,5 +14,6 @@ public record BookingResponse(
         BigDecimal unitPrice,
         BigDecimal totalAmount, 
         BookingStatus status, 
-        LocalDateTime bookedAt) {
+        LocalDateTime bookedAt,
+        LocalDateTime holdExpiresAt) {
 }

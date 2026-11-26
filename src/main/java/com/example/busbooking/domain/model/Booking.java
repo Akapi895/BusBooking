@@ -17,11 +17,12 @@ public class Booking {
     private final BigDecimal totalAmount;
     private final BookingStatus status;
     private final LocalDateTime bookedAt;
+    private final LocalDateTime holdExpiresAt;
 
     public Booking(Long id, String bookingCode, Long userId, Long tripId,
                    String passengerName, String passengerPhone, int quantity,
                    BigDecimal unitPrice, BigDecimal totalAmount,
-                   BookingStatus status, LocalDateTime bookedAt) {
+                   BookingStatus status, LocalDateTime bookedAt, LocalDateTime holdExpiresAt) {
         this.id = id;
         this.bookingCode = bookingCode;
         this.userId = userId;
@@ -33,6 +34,7 @@ public class Booking {
         this.totalAmount = totalAmount;
         this.status = status;
         this.bookedAt = bookedAt;
+        this.holdExpiresAt = holdExpiresAt;
     }
 
     public Long getId() { return id; }
@@ -46,4 +48,6 @@ public class Booking {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public BookingStatus getStatus() { return status; }
     public LocalDateTime getBookedAt() { return bookedAt; }
+    /** When an unconfirmed hold lapses; null once the booking leaves HELD. */
+    public LocalDateTime getHoldExpiresAt() { return holdExpiresAt; }
 }

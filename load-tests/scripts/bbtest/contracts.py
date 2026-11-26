@@ -3,7 +3,7 @@ import re
 
 ENDPOINTS = {
     ("GET", "/api/locations"), ("GET", "/api/trips"), ("GET", "/api/trips/{id}"),
-    ("POST", "/api/bookings"), ("GET", "/api/bookings/{id}"), ("DELETE", "/api/bookings/{id}"),
+    ("POST", "/api/bookings"), ("POST", "/api/bookings/{id}/confirm"), ("GET", "/api/bookings/{id}"), ("DELETE", "/api/bookings/{id}"),
     ("GET", "/api/users/me/bookings"), ("GET", "/api/users/me"), ("PUT", "/api/users/me"),
     ("GET", "/api/auth/me"), ("PUT", "/api/users/me/password"),
     *(("POST", "/api/auth/" + action) for action in
@@ -46,7 +46,7 @@ def booking_valid(body, user_id, trip_id, quantity, price=None):
     try:
         # BookingResponse intentionally has no userId; ownership is checked through HTTP + SQL.
         return (body["id"] > 0 and body["tripId"] == trip_id
-                and body["quantity"] == quantity and body["status"] == "CONFIRMED"
+                and body["quantity"] == quantity and body["status"] in ("HELD", "CONFIRMED")
                 and Decimal(str(body["totalAmount"])) == Decimal(str(body["unitPrice"])) * quantity
                 and (price is None or Decimal(str(body["unitPrice"])) == Decimal(str(price))))
     except (KeyError, TypeError, InvalidOperation):

@@ -1,0 +1,244 @@
+{
+  "label": "3-backend",
+  "started_utc": "2026-11-26T05:49:53.021152+00:00",
+  "duration_minutes": 30.1,
+  "load": {
+    "users": 300,
+    "spawn_rate": 30.0,
+    "think_seconds": [
+      0.2,
+      0.6
+    ],
+    "abandon_ratio": 0.15,
+    "cancel_ratio": 0.1
+  },
+  "locust": {
+    "DELETE /api/bookings/{id}": {
+      "Request Count": 2184.0,
+      "Failure Count": 0.0,
+      "Requests/s": 1.2130694009228589,
+      "50%": 25.0,
+      "95%": 430.0,
+      "99%": 710.0,
+      "Max Response Time": 1268.3749999996508
+    },
+    "GET /api/trips?filter": {
+      "Request Count": 858160.0,
+      "Failure Count": 0.0,
+      "Requests/s": 476.65184848716143,
+      "50%": 6.0,
+      "95%": 21.0,
+      "99%": 170.0,
+      "Max Response Time": 1772.1085999946808
+    },
+    "GET /api/users/me/bookings": {
+      "Request Count": 143159.0,
+      "Failure Count": 0.0,
+      "Requests/s": 79.51547727413715,
+      "50%": 5.0,
+      "95%": 20.0,
+      "99%": 170.0,
+      "Max Response Time": 1521.1813999994774
+    },
+    "POST /api/bookings": {
+      "Request Count": 51730.0,
+      "Failure Count": 0.0,
+      "Requests/s": 28.732637412884383,
+      "50%": 10.0,
+      "95%": 270.0,
+      "99%": 600.0,
+      "Max Response Time": 1614.8331000003964
+    },
+    "POST /api/bookings/{id}/confirm": {
+      "Request Count": 21610.0,
+      "Failure Count": 0.0,
+      "Requests/s": 12.002944026530669,
+      "50%": 20.0,
+      "95%": 400.0,
+      "99%": 720.0,
+      "Max Response Time": 1741.3691999972798
+    },
+    "Aggregated": {
+      "Request Count": 1076843.0,
+      "Failure Count": 0.0,
+      "Requests/s": 598.1159766016365,
+      "50%": 6.0,
+      "95%": 32.0,
+      "99%": 260.0,
+      "Max Response Time": 1772.1085999946808
+    }
+  },
+  "p95_drift": {
+    "p95_ms_first_minutes": 57.9,
+    "p95_ms_last_minutes": 10.1,
+    "window_minutes": 5
+  },
+  "statuses": {
+    "DELETE /api/bookings/{id} 200": 2184,
+    "GET /api/trips?filter 200": 858160,
+    "GET /api/users/me/bookings 200": 143159,
+    "POST /api/bookings 201": 25477,
+    "POST /api/bookings 409": 26099,
+    "POST /api/bookings 503": 154,
+    "POST /api/bookings/{id}/confirm 200": 21610
+  },
+  "oracle": {
+    "seat_mismatches": 0,
+    "seat_mismatch_examples": [],
+    "stale_holds": 0,
+    "money_mismatches": 0,
+    "booking_statuses": {
+      "HELD": 119,
+      "EXPIRED": 3749,
+      "CANCELLED": 2184,
+      "CONFIRMED": 19426
+    },
+    "status": "PASS"
+  },
+  "prometheus": {
+    "requests_per_second": {
+      "total": {
+        "first": 0.019901666666666668,
+        "last": 583.5090909090909,
+        "max": 751.6090548773433,
+        "mean": 582.7712725260425
+      }
+    },
+    "requests_per_second_by_instance": {
+      "instance=172.22.0.5:8081": {
+        "first": 0.019901666666666668,
+        "last": 194.47272727272727,
+        "max": 250.99087305916152,
+        "mean": 194.24404233036526
+      },
+      "instance=172.22.0.6:8081": {
+        "first": 0.0,
+        "last": 194.5272727272727,
+        "max": 250.79099538131436,
+        "mean": 194.25904552501405
+      },
+      "instance=172.22.0.7:8081": {
+        "first": 0.0,
+        "last": 194.5090909090909,
+        "max": 250.87272727272725,
+        "mean": 194.26818467066317
+      }
+    },
+    "server_errors_per_second": {
+      "total": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      }
+    },
+    "hikari_pending": {
+      "total": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 16.0,
+        "mean": 0.26229508196721313
+      }
+    },
+    "hikari_active": {
+      "total": {
+        "first": 0.0,
+        "last": 1.0,
+        "max": 29.0,
+        "mean": 2.0163934426229506
+      }
+    },
+    "pg_lock_waits": {
+      "__name__=pg_lock_waits_waiting instance=postgres-exporter:9187 job=postgres server=postgres:5432": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      }
+    },
+    "heap_bytes_by_instance": {
+      "instance=172.22.0.5:8081": {
+        "first": 113646600.0,
+        "last": 86753776.0,
+        "max": 225501976.0,
+        "mean": 142811132.32786885
+      },
+      "instance=172.22.0.6:8081": {
+        "first": 217530096.0,
+        "last": 104175280.0,
+        "max": 234758336.0,
+        "mean": 146368048.78688523
+      },
+      "instance=172.22.0.7:8081": {
+        "first": 200649368.0,
+        "last": 111537824.0,
+        "max": 200649368.0,
+        "mean": 140324381.24590164
+      }
+    },
+    "p95_seconds_by_endpoint": {
+      "method=DELETE uri=/api/bookings/{bookingId}": {
+        "first": 0.5014723359527645,
+        "last": 0.00552249995,
+        "max": 0.5134918586483441,
+        "mean": 0.051035477763997986
+      },
+      "method=GET uri=/api/trips": {
+        "first": 0.12353310122556,
+        "last": 0.004884429487135449,
+        "max": 0.40152253670727894,
+        "mean": 0.024016588916251184
+      },
+      "method=GET uri=/api/users/me/bookings": {
+        "first": 0.37617066289367035,
+        "last": 0.003443690635093167,
+        "max": 0.37617066289367035,
+        "mean": 0.020204527411920973
+      },
+      "method=POST uri=/api/bookings": {
+        "first": 0.5201508459894438,
+        "last": 0.005428654814383561,
+        "max": 0.5201508459894438,
+        "mean": 0.0325491288778854
+      },
+      "method=POST uri=/api/bookings/{bookingId}/confirm": {
+        "first": 0.49549046245416495,
+        "last": 0.0069206009499999995,
+        "max": 0.49549046245416495,
+        "mean": 0.0383195104543649
+      }
+    },
+    "p99_seconds_by_endpoint": {
+      "method=DELETE uri=/api/bookings/{bookingId}": {
+        "first": 0.8828326107527587,
+        "last": 0.005578423989999999,
+        "max": 0.8828326107527587,
+        "mean": 0.08111991961048666
+      },
+      "method=GET uri=/api/trips": {
+        "first": 0.132080801845112,
+        "last": 0.006899037762163005,
+        "max": 0.6294636422646838,
+        "mean": 0.03970926808716766
+      },
+      "method=GET uri=/api/users/me/bookings": {
+        "first": 0.5328900103789135,
+        "last": 0.005333918884883727,
+        "max": 0.5328900103789135,
+        "mean": 0.0342543306828154
+      },
+      "method=POST uri=/api/bookings": {
+        "first": 0.8131278652343777,
+        "last": 0.006899218228823528,
+        "max": 0.8131278652343777,
+        "mean": 0.051490527672358226
+      },
+      "method=POST uri=/api/bookings/{bookingId}/confirm": {
+        "first": 0.7102263559841951,
+        "last": 0.00697652499,
+        "max": 0.7102263559841951,
+        "mean": 0.05943188957552455
+      }
+    }
+  }
+}

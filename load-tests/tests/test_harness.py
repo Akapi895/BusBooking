@@ -135,12 +135,12 @@ class ContractTest(unittest.TestCase):
                 slot_trip_index(trips * capacity, trips, capacity, permutation)
 
     def test_37_endpoints_and_canonical_ids(self):
-        self.assertEqual(len(ENDPOINTS), 37)
+        self.assertEqual(len(ENDPOINTS), 38)
         self.assertIn(("POST", canonical("/api/admin/bookings/7/refund")), ENDPOINTS)
         self.assertEqual(canonical("/api/admin/users/123/role?x=1"), "/api/admin/users/{id}/role")
 
     def test_actual_booking_dto_has_no_user_id(self):
-        body = {"id": 1, "tripId": 2, "quantity": 3, "status": "CONFIRMED", "unitPrice": "0.10", "totalAmount": "0.30"}
+        body = {"id": 1, "tripId": 2, "quantity": 3, "status": "HELD", "unitPrice": "0.10", "totalAmount": "0.30"}
         self.assertTrue(booking_valid(body, 99, 2, 3, "0.10"))
         body["totalAmount"] = "0.31"
         self.assertFalse(booking_valid(body, 99, 2, 3))

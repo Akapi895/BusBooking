@@ -143,11 +143,21 @@ class TripBookingIntegrationTest {
                 .andExpect(jsonPath("$.quantity").value(2))
                 .andExpect(jsonPath("$.unitPrice").value(150000.00))
                 .andExpect(jsonPath("$.totalAmount").value(300000.00))
-                .andExpect(jsonPath("$.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.status").value("HELD"))
+                .andExpect(jsonPath("$.holdExpiresAt").isNotEmpty())
                 .andExpect(jsonPath("$.bookingCode").value(org.hamcrest.Matchers.hasLength(23)))
                 .andReturn();
         BookingResponse booking = json.readValue(created.getResponse().getContentAsString(), BookingResponse.class);
         assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(2);
+
+        mvc.perform(post("/api/bookings/" + booking.id() + "/confirm").header("Authorization", "Bearer " + jwt.issue(otherUserId).value()))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/bookings/" + booking.id() + "/confirm").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.holdExpiresAt").doesNotExist());
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId))
+                .as("Confirming keeps the held seats").isEqualTo(2);
 
         mvc.perform(get("/api/bookings/" + booking.id()).header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(booking.id()));
@@ -326,5 +336,20 @@ class TripBookingIntegrationTest {
                 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
                 """, Long.class, routeId, vehicleId, departure, departure.plusHours(2),
                 new BigDecimal("150000.00"), seats, status);
+    }
+
+    @Test
+    void lapsedHoldExpiresReturnsSeatsAndCannotBeConfirmed() throws Exception {
+        int before = jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId);
+        var hold = bookingService.create(userId, tripId, "Expiring Hold", "0901234567", 1, null);
+        jdbc.update("UPDATE bookings SET hold_expires_at = hold_expires_at - interval '1 hour' WHERE id = ?", hold.getId());
+
+        bookingService.expireHolds();
+        bookingService.expireHolds(); // a second instance running the job must not return the seat again
+
+        assertThat(jdbc.queryForObject("SELECT status FROM bookings WHERE id = ?", String.class, hold.getId())).isEqualTo("EXPIRED");
+        assertThat(jdbc.queryForObject("SELECT available_seats FROM trips WHERE id = ?", Integer.class, tripId)).isEqualTo(before);
+        mvc.perform(post("/api/bookings/" + hold.getId() + "/confirm").header("Authorization", "Bearer " + jwt.issue(userId).value()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error").value("HOLD_EXPIRED"));
     }
 }

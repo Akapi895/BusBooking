@@ -119,19 +119,19 @@ class AdminTripServiceTest {
     @Test void vehicleChangeSubtractsConfirmedSeatsUnderTripLock() {
         activeReferences();
         when(trips.findByIdForUpdate(3L)).thenReturn(Optional.of(existing(4L, TripStatus.SCHEDULED)));
-        when(bookings.countConfirmedSeats(3L)).thenReturn(15L);
+        when(bookings.countTakenSeats(3L)).thenReturn(15L);
         when(trips.save(any())).thenAnswer(call -> call.getArgument(0));
         assertThat(service.update(3L, command()).getAvailableSeats()).isEqualTo(15);
         var order = inOrder(trips, bookings);
         order.verify(trips).findByIdForUpdate(3L);
-        order.verify(bookings).countConfirmedSeats(3L);
+        order.verify(bookings).countTakenSeats(3L);
         order.verify(trips).save(any());
     }
 
     @Test void vehicleChangeRejectsInsufficientCapacityWithoutSaving() {
         activeReferences();
         when(trips.findByIdForUpdate(3L)).thenReturn(Optional.of(existing(4L, TripStatus.SCHEDULED)));
-        when(bookings.countConfirmedSeats(3L)).thenReturn(31L);
+        when(bookings.countTakenSeats(3L)).thenReturn(31L);
         assertThatThrownBy(() -> service.update(3L, command())).isInstanceOf(TripConflictException.class);
         verify(trips, never()).save(any());
     }
@@ -158,18 +158,21 @@ class AdminTripServiceTest {
         assertThat(cancelled.getAvailableSeats()).isEqualTo(7);
         var order = inOrder(trips, bookings);
         order.verify(trips).findByIdForUpdate(3L);
-        order.verify(bookings).countConfirmedSeats(3L);
+        order.verify(bookings).countTakenSeats(3L);
         order.verify(trips).save(any());
     }
 
     @Test void cancelWithConfirmedBookingsQueuesRefundsAndReleasesSeats() {
         when(trips.findByIdForUpdate(3L)).thenReturn(Optional.of(existing(2L, TripStatus.SCHEDULED)));
-        when(bookings.countConfirmedSeats(3L)).thenReturn(3L);
+        when(bookings.countTakenSeats(3L)).thenReturn(3L);
         when(trips.save(any())).thenAnswer(call -> call.getArgument(0));
         Trip cancelled = service.cancel(3L);
         assertThat(cancelled.getStatus()).isEqualTo(TripStatus.CANCELLED);
         assertThat(cancelled.getAvailableSeats()).isEqualTo(10);
-        verify(bookings).markTripRefundPending(eq(3L), any());
+        // Holds are cancelled before confirmed bookings are queued for refund (see TripService.cancel).
+        var order = inOrder(bookings);
+        order.verify(bookings).cancelTripHolds(3L);
+        order.verify(bookings).markTripRefundPending(eq(3L), any());
     }
 
     @Test void repeatedCancellationReturnsCurrentTripWithoutSaving() {

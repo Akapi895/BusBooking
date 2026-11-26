@@ -147,6 +147,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return reply(request, 409, "TRIP_CONFLICT", error.getMessage(), Map.of(), new HttpHeaders());
     }
 
+    @ExceptionHandler(HoldExpiredException.class)
+    public ResponseEntity<Object> holdExpired(HoldExpiredException error, WebRequest request) {
+        return reply(request, 409, "HOLD_EXPIRED", error.getMessage(), Map.of(), new HttpHeaders());
+    }
+
     @ExceptionHandler(IdempotencyConflictException.class)
     public ResponseEntity<Object> idempotencyConflict(IdempotencyConflictException error, WebRequest request) {
         return reply(request, 409, "IDEMPOTENCY_CONFLICT", error.getMessage(), Map.of(), new HttpHeaders());

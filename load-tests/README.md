@@ -121,3 +121,54 @@ Từ thư mục gốc của repo, build JAR bằng mvn -B -DskipTests package v�
     python load-tests/scripts/run_hotspot_scaling.py --jar target/busbooking-0.0.1-SNAPSHOT.jar --output target/hotspot-scaling --clients 160
 
 Mỗi cấu hình khởi động từ một DB riêng với cùng cách sinh dữ liệu và một chuyến có 40 ghế. Client gửi yêu cầu qua các cổng loopback luân phiên khi chạy hai JVM. File summary.json ghi SHA của JAR, p95/p99, số booking mỗi giây, mã phản hồi và kết quả đối soát booking với số ghế. Một lượt chạy chỉ mô tả kịch bản burst trên máy đang đo. Để so sánh ổn định, lặp lại với các thư mục kết quả mới và cùng cấu hình máy.
+
+## Đo tải dài 30 phút: 1 và 3 backend
+
+Dựng cụm (thêm `--scale backend=1` hoặc `3`), rồi chạy Locust phân tán qua Nginx. Script đối soát ghế với DB và lấy số liệu từ Prometheus:
+
+    docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml -f compose.observability.yaml up -d --scale backend=3
+    cd load-tests/scripts
+    python run_soak.py --dsn postgresql://busbooking_user:PW@127.0.0.1:5435/busbooking_dev_fresh --jwt-secret "$JWT_SECRET" \
+        --label 3-backend --minutes 30 --users 300 --spawn-rate 30 --think-min 0.2 --think-max 0.6 --out ../results/soak/3-backend
+
+Kịch bản: 300 khách ảo, nghỉ 0,2–0,6 s giữa các thao tác, 4 tiến trình Locust. Mỗi khách:
+
+- tìm chuyến theo tuyến và ngày trong 14 ngày tới (trọng số 6);
+- xem vé của mình (trọng số 1);
+- giữ ghế (trọng số 2). Sau khi giữ, 15% bỏ không xác nhận để ghế tự hết hạn; số còn lại xác nhận, và 10% trong số đó huỷ.
+
+Mỗi cấu hình chạy trên DB seed mới. Số liệu gốc nằm trong [`results/soak/`](results/soak/): `summary.json`, `locust_stats*.csv` và `prometheus.json`.
+
+| Chỉ số | 3 backend | 1 backend |
+|---|---|---|
+| Request (req/s trung bình) | 1.076.843 (598) | 1.069.775 (594) |
+| Request lỗi theo Locust / 5xx ngoài 503 | 0 / 0 | 0 / 0 |
+| Giữ ghế: 201 / 409 hết ghế / 503 bận | 25.477 / 26.099 / 154 | 25.340 / 26.002 / 1.016 |
+| Đối soát ghế, tiền, hold quá hạn | PASS (0 lệch) | PASS (0 lệch) |
+| Vé cuối lượt: CONFIRMED / EXPIRED / CANCELLED / HELD | 19.426 / 3.749 / 2.184 / 119 | 19.349 / 3.694 / 2.194 / 103 |
+| p95 / p99 toàn lượt (Locust) | 32 / 260 ms | 69 / 240 ms |
+| Hikari pending tối đa | 16 | 52 |
+| Lock PostgreSQL đang chờ (lấy mẫu 5 s) | 0 | 0 |
+| req/s mỗi instance | 194 / 194 / 194 | 589 |
+
+p95 (ms) theo từng giai đoạn, lấy trung vị các mẫu trong cửa sổ trượt của Locust:
+
+| Giai đoạn | Giữ ghế: 3 backend | Giữ ghế: 1 backend | Tìm chuyến: 3 backend | Tìm chuyến: 1 backend |
+|---|---|---|---|---|
+| 0–3 phút: JVM khởi động, khoảng 100 lượt giữ ghế/s | 210 | 150 | 140 | 130 |
+| 3–15 phút: 12–47 lượt giữ ghế/s | 10–18 | 25–95 | 9–15 | 22–75 |
+| 15–30 phút: hầu hết chuyến đã hết ghế | 9–10 | 10–12 | 8–9 | 10 |
+
+Nhận xét:
+
+- Khi tải ghi còn nhiều (phút 3–15), 3 backend giữ p95 dưới 20 ms. 1 backend lên tới 95 ms, hàng chờ Hikari tối đa 52 và trả 503 nhiều gấp 6,6 lần.
+- Khi chủ yếu là đọc, hai cấu hình như nhau.
+- Ba phút đầu, 3 backend chậm hơn một chút vì cả ba JVM đều đang khởi động. Vì phần lớn lượt giữ ghế dồn vào giai đoạn này, p95 giữ ghế tính cả lượt của 3 backend (270 ms) cao hơn của 1 backend (180 ms).
+- Hold hết hạn trả ghế đúng như thiết kế. Khoảng 3.700 vé bị bỏ đã chuyển sang EXPIRED, và số ghế được trả lại khớp với DB. Lượng giữ ghế tăng lại ở phút 9–15 vì chỗ của các vé bị bỏ ở phút 0–3 đã được trả. Không có hold nào quá hạn mà vẫn ở trạng thái HELD.
+- Nginx chia đều tải cho 3 instance. Heap không tăng dần trong 30 phút; chừng đó chưa đủ để kết luận về rò rỉ bộ nhớ.
+
+Giới hạn của lượt đo:
+
+- Tải ghi chỉ kéo dài khoảng 15 phút. Dữ liệu seed hết ghế: khi lượt 1 backend kết thúc, 2.295 trên 2.459 chuyến trong 14 ngày đã bán hết. Nửa sau là tải đọc cộng với các lượt 409 nên không phải soak ghi 30 phút.
+- Máy phát tải, PostgreSQL và các backend chạy chung một máy, nên 1 và 3 backend được so trên cùng một CPU.
+- Mỗi cấu hình chỉ chạy một lần.

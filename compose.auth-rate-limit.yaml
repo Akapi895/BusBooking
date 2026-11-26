@@ -3,6 +3,8 @@ services:
     environment:
       AUTH_RATE_LIMIT_BACKEND: redis
       SPRING_DATA_REDIS_HOST: redis
+      # Report the backend DOWN when the shared rate-limit store is unreachable.
+      MANAGEMENT_HEALTH_REDIS: "true"
     networks:
       rate-limit-store:
     depends_on:
