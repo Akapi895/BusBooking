@@ -10,7 +10,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD_required}
 
     ports:
-      - "5435:5432"
+      # Host loopback only: the database must not be reachable from the network.
+      - "127.0.0.1:5435:5432"
 
     volumes:
       - busbooking_data:/var/lib/postgresql/data
@@ -30,12 +31,14 @@ services:
     restart: unless-stopped
 
     ports:
-      - "8086:8085"
+      # Direct API access for local tools only; clients go through Nginx on port 5173.
+      - "127.0.0.1:8086:8085"
       # Actuator (health, metrics incl. hikaricp.*) published to the host's loopback only.
       - "127.0.0.1:8087:8081"
 
     environment:
-      SPRING_PROFILES_ACTIVE: dev
+      # dev seeds demo accounts (known password) and enables Swagger; set SPRING_PROFILES_ACTIVE=prod on a shared server.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
 
       DB_URL: jdbc:postgresql://postgres:5432/busbooking_dev_fresh
       DB_USERNAME: busbooking_user
@@ -87,7 +90,8 @@ services:
     container_name: busbooking-docker-mailpit
 
     ports:
-      - "8026:8025"
+      # Loopback only: the inbox shows every OTP and password reset code.
+      - "127.0.0.1:8026:8025"
 
 volumes:
   busbooking_data:

@@ -52,7 +52,7 @@ docker compose version
 
 ## 6.4. Cách 1: Chạy bằng Docker Compose (khuyến nghị)
 
-**Bước 1.** Kiểm tra Compose hợp lệ và xem tên service thực tế: `compose.yaml` có `postgres`, `backend`, `mailpit`; PostgreSQL publish `5435:5432`, backend `8086:8085`, Mailpit UI `8026:8025`; SMTP 1025 chỉ dùng trong Docker network.
+**Bước 1.** Kiểm tra Compose hợp lệ và xem tên service thực tế: `compose.yaml` có `postgres`, `backend`, `mailpit`; PostgreSQL publish `127.0.0.1:5435:5432`, backend `127.0.0.1:8086:8085`, Mailpit UI `127.0.0.1:8026:8025` (chỉ máy host truy cập được; máy khác vào qua Nginx cổng 5173); SMTP 1025 chỉ dùng trong Docker network. Mặc định chạy profile `dev` (dữ liệu demo, Swagger); trên máy người khác truy cập được, đặt `SPRING_PROFILES_ACTIVE=prod` trong `.env`.
 
 ```powershell
 docker compose config --quiet
