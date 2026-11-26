@@ -1,3 +1,6 @@
+# Fixed project name: volumes and networks are busbooking_*, whichever clone folder runs Compose.
+name: busbooking
+
 services:
   postgres:
     image: postgres:16
@@ -101,7 +104,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:v1.21
-    container_name: busbooking-docker-mailpit
+    container_name: busbooking-mailpit
     restart: unless-stopped
 
     ports:
