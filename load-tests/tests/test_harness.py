@@ -15,13 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from bbtest.adaptive import Search, classify
-from bbtest.common import histogram_percentile, jwt, validate_config, slot_permutation, slot_trip_index
+from bbtest.common import jwt, validate_config, slot_permutation, slot_trip_index
 from bbtest.contracts import ENDPOINTS, booking_valid, canonical, reset_code, verification_code
 from bbtest.report import archive, build
 from bbtest.runner import aggregate, Runner
 from bbtest.common import save
 from bbtest.contracts import REQUIRED_CASES
-from bbtest.common import read_journal
 from package_kaggle import package
 
 import yaml

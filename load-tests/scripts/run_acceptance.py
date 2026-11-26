@@ -43,7 +43,7 @@ def main():
         if config["profile"] == "smoke":
             run_smoke(rt, fixture, Path(__file__).parent)
         else:
-            cases = Acceptance(rt, fixture).run()
+            Acceptance(rt, fixture).run()
             build(rt.root)
             archive(rt.root)
             # Keep collecting performance evidence even when a contract fails; never report a global pass.

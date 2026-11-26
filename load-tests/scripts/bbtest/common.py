@@ -98,12 +98,6 @@ def slot_trip_index(number, trips, capacity, permutation):
     return ((multiplier * number + offset) % (trips * capacity)) % trips
 
 
-def redact(text, secrets):
-    for value in sorted((v for v in secrets if v), key=len, reverse=True):
-        text = text.replace(value, "[REDACTED]")
-    return text
-
-
 def effective_cpus():
     """Report quota and affinity separately; psutil's CPU% uses one core = 100%."""
     affinity = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()

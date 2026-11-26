@@ -1,5 +1,4 @@
 """Evidence-backed hypotheses, never automatic causal or optimization claims."""
-import json
 from pathlib import Path
 from .common import read_journal
 

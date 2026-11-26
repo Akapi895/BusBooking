@@ -3,7 +3,6 @@
 Stdlib only: this must run before installing any harness requirements.
 """
 import argparse
-import json
 import os
 from pathlib import Path
 import shutil
