@@ -8,6 +8,7 @@ import com.example.busbooking.domain.enums.TripStatus;
 import com.example.busbooking.domain.exception.*;
 import com.example.busbooking.domain.model.Booking;
 import com.example.busbooking.domain.model.Trip;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,9 @@ public class BookingService {
     private final TripRepository tripRepository;
     private final BookingIdempotencyRepository idempotency;
     private final Clock clock;
+    // Field injection keeps the default for services built directly in unit tests.
+    @Value("${booking.hold-minutes:10}")
+    private long holdMinutes = 10;
 
     public BookingService(BookingRepository bookingRepository, TripRepository tripRepository,
                           BookingIdempotencyRepository idempotency, Clock clock) {
@@ -69,7 +73,7 @@ public class BookingService {
         }
         BigDecimal total = reservation.price().multiply(BigDecimal.valueOf(quantity));
         Booking booking = new Booking(null, "BK-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20), userId, tripId,
-                name, phone, quantity, reservation.price(), total, BookingStatus.CONFIRMED, now);
+                name, phone, quantity, reservation.price(), total, BookingStatus.HELD, now, now.plusMinutes(holdMinutes));
         Booking saved = bookingRepository.save(booking);
         if (key != null) idempotency.complete(userId, key, saved.getId());
         return saved;
@@ -118,6 +122,29 @@ public class BookingService {
         return bookingRepository.findForAdmin(userId, tripId, status, page, size);
     }
 
+    /** Turns the customer's hold into a confirmed booking while the hold is still running. */
+    @Transactional
+    public Booking confirm(Long userId, boolean admin, Long bookingId) {
+        // Locking the booking makes a concurrent hold expiry or trip cancellation wait for this decision.
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found with id: " + bookingId));
+        verifyAccess(userId, admin, booking);
+        if (booking.getStatus() == BookingStatus.CONFIRMED) return booking;
+        if (booking.getStatus() == BookingStatus.EXPIRED) throw new HoldExpiredException();
+        if (booking.getStatus() != BookingStatus.HELD) {
+            throw new BusinessException("Only held bookings can be confirmed");
+        }
+        LocalDateTime now = TravelTime.now(clock);
+        // The expiry job runs every few seconds; a lapsed hold is refused even before it runs.
+        if (!now.isBefore(booking.getHoldExpiresAt())) throw new HoldExpiredException();
+        Trip trip = tripRepository.findById(booking.getTripId())
+                .orElseThrow(() -> new ResourceNotFoundException("Trip not found with id: " + booking.getTripId()));
+        if (trip.getStatus() != TripStatus.SCHEDULED || !trip.getDepartureTime().isAfter(now)) {
+            throw new BusinessException("Trip is not available for booking");
+        }
+        return bookingRepository.confirm(bookingId);
+    }
+
     @Transactional
     public Booking cancel(Long userId, boolean admin, Long bookingId) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
@@ -126,7 +153,10 @@ public class BookingService {
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             return booking;
         }
-        if (booking.getStatus() != BookingStatus.CONFIRMED) {
+        if (booking.getStatus() == BookingStatus.EXPIRED) {
+            throw new BusinessException("The seat hold has expired; nothing to cancel");
+        }
+        if (booking.getStatus() != BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.HELD) {
             throw new BusinessException("The trip was cancelled; this booking is being refunded");
         }
         Trip trip = tripRepository.findByIdForUpdate(booking.getTripId())
@@ -174,6 +204,13 @@ public class BookingService {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException(exception);
         }
+    }
+
+    /** Returns the seats of lapsed holds; safe to run on every instance at once. */
+    @Scheduled(fixedDelayString = "${booking.hold-expiry-interval-ms:15000}")
+    @Transactional
+    public void expireHolds() {
+        bookingRepository.expireHolds(TravelTime.now(clock));
     }
 
     @Scheduled(fixedDelay = 60_000)

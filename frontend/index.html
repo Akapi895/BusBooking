@@ -82,6 +82,18 @@
             <button value="ok" class="primary">Xác nhận đặt vé</button>
           </div>
         </div>
+        <div id="book-hold" hidden>
+          <div class="dialog-body hold">
+            <p class="section-label">Đang giữ chỗ cho bạn</p>
+            <p id="hold-countdown" class="hold-countdown" aria-live="off">10:00</p>
+            <p id="hold-note" class="hint">Xác nhận trước khi hết giờ, nếu không ghế sẽ được trả lại cho chuyến.</p>
+            <div class="total"><span>Tổng tiền</span><output id="hold-total"></output></div>
+          </div>
+          <div class="actions">
+            <button type="button" id="hold-release" class="ghost">Huỷ giữ chỗ</button>
+            <button type="button" id="hold-confirm" class="primary">Xác nhận đặt vé</button>
+          </div>
+        </div>
         <div id="book-done" hidden>
           <div class="dialog-body done">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>

@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Every backend replica: the "backend" service name resolves to one address per instance.
+  - job_name: backend
+    metrics_path: /actuator/prometheus
+    dns_sd_configs:
+      - names: [backend]
+        type: A
+        port: 8081
+        refresh_interval: 15s
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

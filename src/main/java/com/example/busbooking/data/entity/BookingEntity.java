@@ -32,6 +32,8 @@ public class BookingEntity {
     private BookingStatus status;
     @Column(name = "booked_at", nullable = false)
     private LocalDateTime bookedAt;
+    @Column(name = "hold_expires_at")
+    private LocalDateTime holdExpiresAt;
 
     public BookingEntity() {}
 
@@ -46,6 +48,7 @@ public class BookingEntity {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public BookingStatus getStatus() { return status; }
     public LocalDateTime getBookedAt() { return bookedAt; }
+    public LocalDateTime getHoldExpiresAt() { return holdExpiresAt; }
 
     public void setBookingCode(String bookingCode) { this.bookingCode = bookingCode; }
     public void setUserId(Long userId) { this.userId = userId; }
@@ -57,4 +60,5 @@ public class BookingEntity {
     public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
     public void setStatus(BookingStatus status) { this.status = status; }
     public void setBookedAt(LocalDateTime bookedAt) { this.bookedAt = bookedAt; }
+    public void setHoldExpiresAt(LocalDateTime holdExpiresAt) { this.holdExpiresAt = holdExpiresAt; }
 }

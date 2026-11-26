@@ -13,6 +13,7 @@ public record BookingHistoryResponse(
         int quantity, 
         BigDecimal totalAmount,
         BookingStatus status, 
-        LocalDateTime bookedAt
+        LocalDateTime bookedAt,
+        LocalDateTime holdExpiresAt
 ) {
 }

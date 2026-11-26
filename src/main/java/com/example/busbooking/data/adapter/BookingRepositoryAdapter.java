@@ -25,8 +25,18 @@ public class BookingRepositoryAdapter implements BookingRepository {
     public Booking save(Booking booking) {
         return mapper.toDomain(repository.save(mapper.toEntity(booking)));
     }
-    public long countConfirmedSeats(Long tripId) {
-        return repository.countSeats(tripId, BookingStatus.CONFIRMED);
+    public long countTakenSeats(Long tripId) {
+        return repository.countSeats(tripId, List.of(BookingStatus.CONFIRMED, BookingStatus.HELD));
+    }
+    public Booking confirm(Long id) {
+        repository.confirm(id);
+        return repository.findById(id).map(mapper::toDomain).orElseThrow();
+    }
+    public int cancelTripHolds(Long tripId) {
+        return repository.cancelTripHolds(tripId);
+    }
+    public long expireHolds(java.time.LocalDateTime now) {
+        return repository.expireHolds(now);
     }
     public List<Booking> findForAdmin(Long userId, Long tripId, BookingStatus status) {
         return findForAdmin(userId, tripId, status, Pageable.unpaged());

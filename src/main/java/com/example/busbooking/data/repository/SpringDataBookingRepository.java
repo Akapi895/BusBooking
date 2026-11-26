@@ -10,8 +10,36 @@ import java.util.List;
 import java.util.Optional;
 
 public interface SpringDataBookingRepository extends JpaRepository<BookingEntity, Long> {
-    @Query("SELECT COALESCE(SUM(b.quantity), 0) FROM BookingEntity b WHERE b.tripId = :tripId AND b.status = :status")
-    long countSeats(@Param("tripId") Long tripId, @Param("status") BookingStatus status);
+    @Query("SELECT COALESCE(SUM(b.quantity), 0) FROM BookingEntity b WHERE b.tripId = :tripId AND b.status IN :statuses")
+    long countSeats(@Param("tripId") Long tripId, @Param("statuses") List<BookingStatus> statuses);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "UPDATE bookings SET status = 'CONFIRMED', hold_expires_at = NULL WHERE id = :id AND status = 'HELD'",
+            nativeQuery = true)
+    int confirm(@Param("id") Long id);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "UPDATE bookings SET status = 'CANCELLED', hold_expires_at = NULL WHERE trip_id = :tripId AND status = 'HELD'",
+            nativeQuery = true)
+    int cancelTripHolds(@Param("tripId") Long tripId);
+
+    // Rows another instance already expired fail the status re-check, so seats are returned once.
+    // Not @Modifying: the statement ends in a SELECT, which executeUpdate would reject.
+    @Query(value = """
+        WITH lapsed AS (
+            UPDATE bookings SET status = 'EXPIRED', hold_expires_at = NULL
+             WHERE status = 'HELD' AND hold_expires_at <= :now
+            RETURNING trip_id, quantity
+        ), seats AS (
+            SELECT trip_id, sum(quantity) AS quantity FROM lapsed GROUP BY trip_id
+        ), restored AS (
+            UPDATE trips t SET available_seats = t.available_seats + s.quantity
+              FROM seats s WHERE t.id = s.trip_id
+            RETURNING t.id
+        )
+        SELECT count(*) FROM lapsed
+        """, nativeQuery = true)
+    long expireHolds(@Param("now") java.time.LocalDateTime now);
 
     @Query("""
         SELECT b FROM BookingEntity b

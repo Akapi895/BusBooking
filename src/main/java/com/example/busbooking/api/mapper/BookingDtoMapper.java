@@ -16,7 +16,8 @@ public class BookingDtoMapper {
                                 b.getUnitPrice(), 
                                 b.getTotalAmount(), 
                                 b.getStatus(), 
-                                b.getBookedAt());
+                                b.getBookedAt(),
+                                b.getHoldExpiresAt());
     }
     public BookingHistoryResponse toHistoryResponse(Booking b) {
         return new BookingHistoryResponse(b.getId(), 
@@ -27,6 +28,7 @@ public class BookingDtoMapper {
                                         b.getQuantity(),
                                         b.getTotalAmount(), 
                                         b.getStatus(), 
-                                        b.getBookedAt());
+                                        b.getBookedAt(),
+                                b.getHoldExpiresAt());
     }
 }

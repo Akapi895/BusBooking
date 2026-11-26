@@ -173,7 +173,23 @@ Với backend local cổng 8085 hoặc Compose publish 8086, khi tài liệu API
 | Actuator health | http://127.0.0.1:8081/actuator/health (local); http://127.0.0.1:8087/actuator/health (Compose) |
 | Metric pool DB | http://127.0.0.1:8081/actuator/metrics/hikaricp.connections.active (local); cổng 8087 với Compose. Xem thêm `hikaricp.connections.pending`, `.max`, `.idle`, `.acquire` |
 
-Actuator chạy trên cổng quản trị riêng (`MANAGEMENT_PORT`, mặc định 8081) và chỉ nghe `127.0.0.1` (`MANAGEMENT_ADDRESS`); cổng API 8085/8086 không phục vụ `/actuator`. Chỉ mở `health` và `metrics`; health không hiện chi tiết và không tính SMTP. Khi dùng Redis cho rate limit, đặt `MANAGEMENT_HEALTH_REDIS=true` để health phản ánh Redis.
+Actuator chạy trên cổng quản trị riêng (`MANAGEMENT_PORT`, mặc định 8081) và chỉ nghe `127.0.0.1` (`MANAGEMENT_ADDRESS`); cổng API 8085/8086 không phục vụ `/actuator`. Chỉ mở `health`, `metrics` và `prometheus` (bản scrape cho Prometheus); health không hiện chi tiết và không tính SMTP. Khi dùng Redis cho rate limit, đặt `MANAGEMENT_HEALTH_REDIS=true` để health phản ánh Redis.
+
+**Prometheus và Grafana.** Ghép `compose.observability.yaml` để thu metric của mọi backend (tìm theo DNS tên dịch vụ `backend`), PostgreSQL qua `postgres_exporter` (gồm số lock đang chờ) và bật `log_lock_waits`:
+
+```powershell
+docker compose -f compose.yaml -f compose.observability.yaml up -d
+```
+
+Prometheus ở http://127.0.0.1:9090, Grafana ở http://127.0.0.1:3000 (dashboard `BusBooking`, xem không cần đăng nhập, chỉ nghe loopback): request/s và mã phản hồi, p95/p99 theo endpoint, request/s theo instance, kết nối Hikari đang chờ/đang dùng, lock PostgreSQL đang chờ, heap JVM.
+
+**Chạy nhiều backend sau Nginx.** `compose.scale.yaml` bỏ tên container và cổng publish của backend để chạy nhiều replica; frontend Nginx chia request cho mọi replica, rate limit auth dùng chung qua Redis:
+
+```powershell
+docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml -f compose.observability.yaml up -d --scale backend=3
+```
+
+Nginx chỉ phân giải tên `backend` lúc khởi động, nên đổi số replica xong phải restart service `frontend`. Truy cập API qua http://localhost:5173/api.
 
 Kiểm tra HTTP và xuất đặc tả API từ **ứng dụng đang chạy**:
 
@@ -190,7 +206,7 @@ Swagger có thể bị tắt ngoài profile `dev`/`test` nếu chưa bật `API_
 2. Mở Mailpit hoặc hộp thư đã cấu hình để lấy OTP; gọi `POST /api/auth/verify-email`.
 3. `POST /api/auth/login` — nhận JWT, dùng Swagger **Authorize** với Bearer token.
 4. `GET /api/auth/me`, `GET /api/locations`, `GET /api/trips` — kiểm tra xác thực và dữ liệu công khai.
-5. `POST /api/bookings` — tạo booking cho chuyến còn ghế; kiểm tra xem/hủy booking theo quyền.
+5. `POST /api/bookings` — giữ ghế cho chuyến còn chỗ (vé `HELD`, giữ 10 phút theo `BOOKING_HOLD_MINUTES`); `POST /api/bookings/{id}/confirm` để xác nhận trước hạn, quá hạn thì vé thành `EXPIRED` và ghế được trả lại; kiểm tra xem/hủy booking theo quyền.
 6. Dùng tài khoản có quyền phù hợp để thử API quản trị; `USER` không được truy cập endpoint chỉ dành cho `ADMIN`/`SUPER_ADMIN`.
 
 Chi tiết request/response, quyền và 32 endpoint: [`04-api-design.md`](04-api-design.md). `docs/openapi.json` hiện còn lỗi response/validation và chứa `/error` nội bộ; chỉ xuất lại JSON không bảo đảm các lỗi đặc tả đã được sửa.

@@ -36,7 +36,8 @@ public class BookingController {
 
     @PostMapping("/bookings")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Book seats on an upcoming trip")
+    @Operation(summary = "Hold seats on an upcoming trip",
+            description = "The booking starts HELD; confirm it before holdExpiresAt or its seats go back to the trip.")
     @ApiResponse(responseCode = "409", description = "Insufficient seats or idempotency key reused with a different request",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "503", description = "Temporarily unavailable; retry using the same key",
@@ -57,6 +58,15 @@ public class BookingController {
     public BookingResponse get(@PathVariable Long bookingId, Authentication authentication) {
         Long userId = userId(authentication);
         return mapper.toResponse(bookingService.get(userId, isAdmin(authentication), bookingId));
+    }
+
+    @PostMapping("/bookings/{bookingId}/confirm")
+    @Operation(summary = "Confirm a held booking before its hold expires",
+            description = "Confirming an already confirmed booking returns it unchanged.")
+    @ApiResponse(responseCode = "409", description = "HOLD_EXPIRED: the hold lapsed before confirmation",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public BookingResponse confirm(@PathVariable Long bookingId, Authentication authentication) {
+        return mapper.toResponse(bookingService.confirm(userId(authentication), isAdmin(authentication), bookingId));
     }
 
     @DeleteMapping("/bookings/{bookingId}")
