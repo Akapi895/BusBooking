@@ -16,19 +16,20 @@ Chạy lại test Java bằng `mvn -B verify` với PostgreSQL kiểm thử. Xem
 
 ## Tóm tắt cải tiến theo ISO/IEC 25010
 
-Tóm tắt các cải tiến theo đặc tính chất lượng ISO/IEC 25010. Số đo hiệu năng so bản `dev` cũ (`919bcef`) với Phase 2 (`e43c7c5`) và lấy từ các mục bên dưới. Mô tả tính năng ứng với nhánh `dev` hiện tại, gồm cả thay đổi sau Phase 2. Trạng thái đạt/chưa đạt theo từng chuẩn nằm ở [đối chiếu tiêu chuẩn](09-standards-compliance.md).
+Tóm tắt các cải tiến theo đặc tính chất lượng ISO/IEC 25010. Số đo hiệu năng so bản `dev` cũ (`919bcef`) với Phase 2 (`e43c7c5`) và được tính lại từ dữ liệu đo gốc [`phase2-before-after.json`](../load-tests/results/phase2-before-after.json): trung vị của ba lượt, khoảng trong ngoặc là thấp nhất–cao nhất. Mô tả tính năng được đối chiếu với mã nguồn, migration và test của nhánh `dev` hiện tại, gồm cả thay đổi sau Phase 2. Trạng thái đạt/chưa đạt theo từng chuẩn nằm ở [đối chiếu tiêu chuẩn](09-standards-compliance.md).
 
 ### Hiệu năng
 
 | Chỉ số | Trước | Sau |
 |---|---:|---:|
-| Tìm chuyến có lọc, p95 | 250 ms | 16 ms |
-| Tìm chuyến có lọc, phản hồi thành công/giây | 225 | 695 |
-| Danh sách không lọc | 50.000 chuyến, 23 MB, 1,8 s | 20 chuyến, 9 KB, 16 ms (phân trang) |
-| Tranh ghế 160 client, p95 của phản hồi thành công | 578 ms | 359 ms |
-| Đếm ghế xác nhận theo chuyến (truy vấn DB) | 5,98 ms | 0,22 ms (index V22) |
+| Tìm chuyến có lọc, p95 | 250 ms (109–328) | ≤ 16 ms (16–47) |
+| Tìm chuyến có lọc, phản hồi thành công/giây | 225 (187–450) | 695 (584–724) |
+| Danh sách không lọc, trung vị thời gian nhận | 50.000 chuyến, 23 MB, 1,8 s | 20 chuyến, 9 KB, ≤ 16 ms (phân trang) |
+| Tranh ghế 160 client, p95 của phản hồi thành công | 578 ms (437–1.094) | 359 ms (343–375) |
 
-Cách làm: index cho tìm chuyến và vòng đời chuyến (V20, V22); trừ ghế và đọc giá trong một câu `UPDATE … RETURNING`; phân trang mặc định 20 chuyến; giới hạn số yêu cầu đặt vé xử lý cùng lúc cho mỗi chuyến.
+Đồng hồ đo có độ phân giải 15,6 ms (`GetTickCount64` trên Windows), nên "16 ms" là mức thấp nhất đo được, không phải giá trị chính xác. Tỉ lệ cải thiện của các dòng này chỉ nên đọc là "nhanh hơn ít nhất ngần ấy lần". Công cụ phát tải chạy chung máy với backend và CPU máy chạm 100% ở nhiều lượt của cả hai bản, nên số đo giữa các lượt dao động lớn.
+
+Cách làm: index cho tìm chuyến và vòng đời chuyến (V20, V22); trừ ghế và đọc giá trong một câu `UPDATE … RETURNING`; phân trang mặc định 20 chuyến; giới hạn số yêu cầu đặt vé xử lý cùng lúc cho mỗi chuyến. Repo chưa có dữ liệu gốc cho phép đo `EXPLAIN` của index V22 nêu ở mục [kiểm tra bổ sung](#kiểm-tra-bổ-sung-về-bảo-mật-và-dữ-liệu), nên con số đó không đưa vào bảng.
 
 Khi tranh ghế, Phase 2 từ chối sớm bằng `503` thay vì xếp hàng chờ khóa. Ở 160 client, lần gửi đầu chỉ đặt được 25–28 vé và các yêu cầu còn lại nhận `503`. Vì vậy p95 tính trên mọi phản hồi giảm từ 1.531 xuống 297 ms, nhưng con số công bằng hơn là p95 của riêng phản hồi thành công ở bảng trên. Client thử lại theo `Retry-After` vẫn lấp đủ ghế (mục [khi client thử lại](#khi-client-thử-lại-sau-503)).
 
@@ -57,7 +58,7 @@ Khi tranh ghế, Phase 2 từ chối sớm bằng `503` thay vì xếp hàng ch�
 
 Backend không giữ trạng thái nên chạy được nhiều instance sau Nginx. Rate limit (Redis) và các outbox (`SKIP LOCKED`) vẫn đúng khi nhiều instance cùng chạy.
 
-Giới hạn còn lại: đặt vé cho một chuyến đông khách bị nghẽn ở khóa dòng của chuyến đó trong PostgreSQL. Ở [lượt chạy thử với một và hai backend](#lượt-chạy-thử-với-một-và-hai-backend), hai backend nhận gấp đôi số vé (16 so với 8) vì giới hạn xử lý cùng lúc tính riêng cho từng instance, nhưng p95 tăng từ 1.007 lên 1.255 ms do gấp đôi số yêu cầu cùng chờ một khóa. Mỗi cấu hình mới có một mẫu đo.
+Giới hạn còn lại: đặt vé cho một chuyến đông khách bị nghẽn ở khóa dòng của chuyến đó trong PostgreSQL. Thêm backend không làm phần này nhanh hơn: giới hạn xử lý cùng lúc tính riêng cho từng instance, nên mỗi backend thêm vào lại đưa thêm yêu cầu vào chờ cùng một khóa. Chưa có phép đo nhiều instance nào có dữ liệu gốc trong repo. Các số của [lượt chạy thử với một và hai backend](#lượt-chạy-thử-với-một-và-hai-backend) chỉ có trong tài liệu này, mỗi cấu hình một mẫu.
 
 ### Khả năng bảo trì và vận hành
 
@@ -77,7 +78,7 @@ Giới hạn còn lại: đặt vé cho một chuyến đông khách bị nghẽ
 
 Prometheus và Grafana (mới có Actuator), giữ ghế tạm `HELD` → `CONFIRMED`, và đo tải kéo dài với 3 instance như [kế hoạch](07-optimization-team-plan.md).
 
-Số liệu hiệu năng đo trên một máy local, ba lượt cho mỗi bản. Lượt chạy một và hai backend mới có một mẫu cho mỗi cấu hình.
+Số liệu hiệu năng đo trên một máy local, ba lượt cho mỗi bản.
 
 ## Benchmark trước và sau
 
