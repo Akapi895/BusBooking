@@ -95,6 +95,19 @@ Redis chạy trên mạng riêng của Compose. Backend mặc định dùng bộ
 
 Nginx ghi `X-Forwarded-For` từ kết nối trực tiếp. Cấu hình Compose tin địa chỉ proxy `172.31.241.2`. Khi triển khai ở mạng khác, dùng địa chỉ chính xác của proxy tin cậy và cấu hình proxy ghi đè header do client gửi.
 
+**Triển khai trên máy người khác truy cập được.** Trong `.env` đặt thêm:
+
+- `SPRING_PROFILES_ACTIVE=prod`: không nạp dữ liệu demo (tài khoản `admin@busbooking.local` có mật khẩu công khai), tắt Swagger.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH=true`, `SMTP_STARTTLS=true`, `SMTP_FROM`: nhà cung cấp email thật; mặc định gửi vào Mailpit.
+
+Bật HTTPS bằng cách đặt chứng chỉ của tên miền vào `certs/fullchain.pem` và `certs/privkey.pem` (ví dụ từ Let's Encrypt; thư mục `certs/` không được commit), rồi chạy:
+
+```powershell
+docker compose -f compose.yaml -f compose.tls.yaml up -d --build
+```
+
+Nginx khi đó nghe cổng 443, cổng 80 chỉ chuyển hướng sang HTTPS, và gửi HSTS. Mọi cấu hình Nginx đều gửi CSP, `X-Content-Type-Options` và `Referrer-Policy`.
+
 > **Không dùng `docker compose down -v`** khi muốn giữ dữ liệu. Compose hiện có backend service; khi dùng cách 2 để chạy Java local, dừng backend Compose nếu đang chạy (`docker compose stop backend`), chỉ khởi động `postgres` và dùng SMTP truy cập được từ host theo mục 6.5.
 
 ## 6.5. Cách 2: Chạy Spring Boot trực tiếp trên Windows
