@@ -105,11 +105,11 @@ docker compose -f compose.yaml -f deploy/compose.tls.yaml up -d --build
 
 Nginx khi đó nghe cổng 443, cổng 80 chỉ chuyển hướng sang HTTPS, và gửi HSTS. Mọi cấu hình Nginx đều gửi CSP, `X-Content-Type-Options` và `Referrer-Policy`.
 
-**Deploy lên Render + Neon (miễn phí).** `render.yaml` mô tả backend (Docker, gói free, profile `prod`) và frontend (static site, rewrite `/api/*` sang backend để trình duyệt vẫn gọi cùng origin). Database dùng Neon, email dùng Brevo.
+**Deploy lên Render + Neon (miễn phí).** `render.yaml` mô tả backend (Docker, gói free, profile `prod`) và frontend (static site, rewrite `/api/*` sang backend để trình duyệt vẫn gọi cùng origin). Database dùng Neon, email dùng Resend.
 
 1. **Neon:** tạo project (region Singapore) và lấy chuỗi kết nối của endpoint **direct**, không phải *pooled*, vì pooler bỏ các lệnh `SET lock_timeout`/`SET TIME ZONE` mà Hikari chạy cho mỗi kết nối. Đổi sang dạng JDBC: `jdbc:postgresql://<host>/<db>?sslmode=require`.
-2. **Brevo:** xác minh địa chỉ gửi, tạo SMTP key. Render free chặn cổng 25/465/587 nên `render.yaml` dùng cổng 2525.
-3. **Render:** New → Blueprint → chọn repo, nhánh. Nhập các giá trị `sync: false`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SMTP_USERNAME` (login SMTP của Brevo), `SMTP_PASSWORD` (SMTP key), `SMTP_FROM`. Ba secret JWT/OTP do Render tự sinh.
+2. **Resend:** thêm domain của bạn (Domains → Add Domain) rồi thêm các bản ghi DNS (SPF, DKIM) Resend đưa ra; có thể mất vài giờ mới được xác minh. Tạo API key (API Keys → Create, quyền gửi email). Render free chặn cổng 25/465/587 nên `render.yaml` dùng cổng STARTTLS 2587; username SMTP luôn là `resend`. Gói free của Resend gửi tối đa 100 email/ngày.
+3. **Render:** New → Blueprint → chọn repo, nhánh. Nhập các giá trị `sync: false`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SMTP_PASSWORD` (API key Resend, dạng `re_...`), `SMTP_FROM` (địa chỉ thuộc domain đã xác minh, ví dụ `no-reply@tenmien.vn`). Ba secret JWT/OTP do Render tự sinh.
 4. Nếu Render đặt URL khác `busbooking-api.onrender.com` / `busbooking-web.onrender.com` (tên đã có người dùng), sửa `CORS_ALLOWED_ORIGINS` và rule rewrite `/api/*` trong `render.yaml` cho khớp.
 5. **Tài khoản quản trị:** profile `prod` không nạp dữ liệu demo và không cho bootstrap SUPER_ADMIN. Đăng ký và xác minh email một tài khoản qua giao diện, rồi nâng quyền một lần trong SQL Editor của Neon: `UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'SUPER_ADMIN') WHERE email = '<email>';` (chỉ được có một SUPER_ADMIN; sau đó dùng màn quản trị để cấp ADMIN cho người khác).
 
