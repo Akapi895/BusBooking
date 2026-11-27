@@ -105,11 +105,13 @@ docker compose -f compose.yaml -f deploy/compose.tls.yaml up -d --build
 
 Nginx khi đó nghe cổng 443, cổng 80 chỉ chuyển hướng sang HTTPS, và gửi HSTS. Mọi cấu hình Nginx đều gửi CSP, `X-Content-Type-Options` và `Referrer-Policy`.
 
-**Deploy lên Render + Neon (miễn phí).** `render.yaml` mô tả backend (Docker, gói free, profile `prod`) và frontend (static site, rewrite `/api/*` sang backend để trình duyệt vẫn gọi cùng origin). Database dùng Neon, email dùng Brevo.
+**Deploy lên Render + Neon (miễn phí).** `render.yaml` mô tả backend (Docker, gói free, profile `prod`) và frontend (static site, rewrite `/api/*` sang backend để trình duyệt vẫn gọi cùng origin). Database dùng Neon, email dùng Resend.
 
 1. **Neon:** tạo project (region Singapore) và lấy chuỗi kết nối của endpoint **direct**, không phải *pooled*, vì pooler bỏ các lệnh `SET lock_timeout`/`SET TIME ZONE` mà Hikari chạy cho mỗi kết nối. Đổi sang dạng JDBC: `jdbc:postgresql://<host>/<db>?sslmode=require`.
-2. **Brevo:** xác minh địa chỉ gửi, tạo SMTP key. Render free chặn cổng 25/465/587 nên `render.yaml` dùng cổng 2525.
-3. **Render:** New → Blueprint → chọn repo, nhánh. Nhập các giá trị `sync: false`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SMTP_USERNAME` (login SMTP của Brevo), `SMTP_PASSWORD` (SMTP key), `SMTP_FROM`. Ba secret JWT/OTP do Render tự sinh.
+2. **Resend:** tạo API key (API Keys → Create, quyền gửi email). Render free chặn cổng 25/465/587 nên `render.yaml` dùng cổng STARTTLS 2587; username SMTP luôn là `resend`. Gói free gửi tối đa 100 email/ngày. Chọn một trong hai chế độ, chỉ khác giá trị `SMTP_FROM`:
+   - **Có domain riêng:** thêm domain (Domains → Add Domain) và các bản ghi DNS (SPF, DKIM) Resend đưa ra, chờ xác minh (có thể vài giờ); đặt `SMTP_FROM` là một địa chỉ thuộc domain đó, ví dụ `no-reply@tenmien.vn`. Gửi được cho mọi người.
+   - **Không có domain (chế độ thử):** đặt `SMTP_FROM=onboarding@resend.dev`. Resend chỉ giao thư tới email của chính tài khoản Resend, gửi cho người khác bị từ chối. Đủ để bạn tự đăng ký và xác minh tài khoản quản trị; người khác đăng ký sẽ không nhận được mã nên không đăng nhập được.
+3. **Render:** New → Blueprint → chọn repo, nhánh. Nhập các giá trị `sync: false`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SMTP_PASSWORD` (API key Resend, dạng `re_...`), `SMTP_FROM` (theo chế độ ở bước 2). Ba secret JWT/OTP do Render tự sinh.
 4. Tên service là duy nhất trên toàn `onrender.com`: `busbooking-api` đã có người khác dùng nên Render gán `busbooking-api-dyfr.onrender.com` (frontend là `busbooking-web.onrender.com`). Nếu URL của bạn khác, sửa `CORS_ALLOWED_ORIGINS` và rule rewrite `/api/*` trong `render.yaml` cho khớp, **không để trỏ vào tên của người khác**: mật khẩu đăng nhập sẽ bị gửi tới server đó.
 5. **Tài khoản quản trị:** profile `prod` không nạp dữ liệu demo và không cho bootstrap SUPER_ADMIN. Đăng ký và xác minh email một tài khoản qua giao diện, rồi nâng quyền một lần trong SQL Editor của Neon: `UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'SUPER_ADMIN') WHERE email = '<email>';` (chỉ được có một SUPER_ADMIN; sau đó dùng màn quản trị để cấp ADMIN cho người khác).
 

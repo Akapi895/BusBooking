@@ -46,20 +46,22 @@ services:
       - key: OTP_OUTBOX_SECRET
         generateValue: true
 
-      # Brevo SMTP. Render free blocks outbound 25/465/587, so use Brevo's alternative port 2525.
+      # Resend SMTP. Render free blocks outbound 25/465/587, so use Resend's STARTTLS port 2587.
       - key: SMTP_HOST
-        value: smtp-relay.brevo.com
+        value: smtp.resend.com
       - key: SMTP_PORT
-        value: 2525
+        value: 2587
       - key: SMTP_AUTH
         value: "true"
       - key: SMTP_STARTTLS
         value: "true"
+      # The username is the literal string "resend"; the password is a Resend API key (re_...).
       - key: SMTP_USERNAME
-        sync: false
+        value: resend
       - key: SMTP_PASSWORD
         sync: false
-      # Must be a sender address verified in Brevo.
+      # With a domain verified in Resend: e.g. no-reply@yourdomain (delivers to anyone).
+      # Without one: onboarding@resend.dev, which delivers only to your own Resend account email.
       - key: SMTP_FROM
         sync: false
 
