@@ -40,3 +40,5 @@ build/
 
 # TLS certificate and key for deploy/compose.tls.yaml
 deploy/certs/
+.claude/
+.codex/

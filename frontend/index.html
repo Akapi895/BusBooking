@@ -64,7 +64,7 @@
     <dialog id="book-dialog">
       <form id="book-form" method="dialog">
         <div class="dialog-head">
-          <p class="eyebrow">Đặt vé · Chuyến #<span id="book-trip"></span></p>
+          <p class="eyebrow">Đặt vé</p>
           <h3 id="book-route"></h3>
           <p id="book-when"></p>
         </div>
@@ -76,10 +76,11 @@
             <label>Số điện thoại <input id="passenger-phone" name="passengerPhone" type="tel" maxlength="20" autocomplete="tel" required></label>
             <label>Số ghế <input id="quantity" type="number" name="quantity" min="1" value="1" required></label>
             <div class="total"><span>Tạm tính</span><output id="book-total"></output></div>
+            <p class="hint">Ghế được giữ 10 phút để bạn xác nhận ở bước tiếp theo.</p>
           </div>
           <div class="actions">
             <button value="cancel" class="ghost" formnovalidate>Huỷ</button>
-            <button value="ok" class="primary">Xác nhận đặt vé</button>
+            <button value="ok" class="primary">Giữ chỗ</button>
           </div>
         </div>
         <div id="book-hold" hidden>
@@ -114,12 +115,7 @@
   <!-- My bookings -->
   <section id="view-bookings" class="wrap page" hidden>
     <h1>Vé của tôi</h1>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Mã vé</th><th>Chuyến</th><th>Hành khách</th><th class="num">Số ghế</th><th class="num">Tổng tiền</th><th>Trạng thái</th><th>Đặt lúc</th><th></th></tr></thead>
-        <tbody id="bookings"></tbody>
-      </table>
-    </div>
+    <ol id="bookings" class="bookings"></ol>
     <div class="pager">
       <button type="button" id="booking-prev" disabled>Trang trước</button>
       <span id="booking-page" aria-live="polite">Trang 1</span>
