@@ -122,7 +122,6 @@ public class BookingService {
         return bookingRepository.findForAdmin(userId, tripId, status, page, size);
     }
 
-    /** Turns the customer's hold into a confirmed booking while the hold is still running. */
     @Transactional
     public Booking confirm(Long userId, boolean admin, Long bookingId) {
         // Locking the booking makes a concurrent hold expiry or trip cancellation wait for this decision.
