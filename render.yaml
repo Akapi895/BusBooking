@@ -19,6 +19,10 @@ services:
         value: 8085
       - key: SPRING_PROFILES_ACTIVE
         value: prod
+      # Demo catalogue (locations, operators, routes, vehicles, trips; no accounts) from
+      # db/catalogue, the same file the dev profile loads. Leave it out on a new database to start empty.
+      - key: SPRING_FLYWAY_LOCATIONS
+        value: classpath:db/migration,classpath:db/catalogue
       # Free = 0.1 CPU: SerialGC and C1-only JIT cut startup (440 s -> 385 s measured locally at --cpus 0.1).
       - key: JAVA_TOOL_OPTIONS
         value: -Duser.timezone=Asia/Ho_Chi_Minh -XX:+UseSerialGC -XX:TieredStopAtLevel=1

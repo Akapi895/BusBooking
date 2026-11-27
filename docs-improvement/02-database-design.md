@@ -21,7 +21,7 @@ Thiết kế tách các thực thể theo trách nhiệm để hạn chế trùn
 | `bookings` | Đơn đặt vé của người dùng, gồm giữ chỗ, hoàn tiền và thông báo hủy chuyến |
 | `booking_idempotency` | Khóa `Idempotency-Key` của yêu cầu tạo booking, giữ 24 giờ |
 
-> **Nguồn chính xác của schema:** Các file Flyway migration trong `src/main/resources/db/migration/`, được cấu hình bằng `spring.flyway.locations`. Source hiện có 27 migration liên tục V1–V27; V16 bỏ bốn index tăng tốc của V14/V15 và giữ các ràng buộc toàn vẹn. Profile `dev` nạp thêm `src/main/resources/db/seed/R__dev_seed_data.sql` (repeatable migration, dữ liệu demo); profile `test` và production không chạy file này. Trạng thái database đang chạy chưa được truy vấn để xác minh.
+> **Nguồn chính xác của schema:** Các file Flyway migration trong `src/main/resources/db/migration/`, được cấu hình bằng `spring.flyway.locations`. Source hiện có 27 migration liên tục V1–V27; V16 bỏ bốn index tăng tốc của V14/V15 và giữ các ràng buộc toàn vẹn. Dữ liệu demo là hai repeatable migration: `src/main/resources/db/catalogue/R__demo_catalogue.sql` (địa điểm, nhà xe, tuyến, xe, chuyến; profile `dev` và Render bật qua `spring.flyway.locations`) và `src/main/resources/db/seed/R__dev_seed_data.sql` (tài khoản và vé demo, chỉ profile `dev`, chạy sau danh mục). Profile `test` không chạy cả hai. Trạng thái database đang chạy chưa được truy vấn để xác minh.
 
 ## 2.2. Sơ đồ quan hệ (ERD)
 

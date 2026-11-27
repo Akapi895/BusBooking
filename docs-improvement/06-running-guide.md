@@ -80,7 +80,7 @@ Thoát chế độ xem log bằng `Ctrl+C` (không dừng container).
 
 **Bước 4.** Mở giao diện tại `http://localhost:5173`, Swagger tại `http://localhost:8086/swagger-ui/index.html` và Mailpit UI tại `http://localhost:8026`. Gửi yêu cầu đăng ký, đợi email xuất hiện trong Mailpit rồi dùng OTP để xác minh.
 
-Profile `dev` nạp dữ liệu demo từ `src/main/resources/db/seed/R__dev_seed_data.sql`: tài khoản `demo@busbooking.local` (USER, có sẵn booking) và `admin@busbooking.local` (ADMIN), mật khẩu `matkhau123`, đã xác minh email; kèm danh mục, chuyến xe và các tài khoản `khach001`…`khach150@busbooking.local`.
+Profile `dev` nạp dữ liệu demo: danh mục và chuyến từ `src/main/resources/db/catalogue/R__demo_catalogue.sql` (cùng file bản deploy Render dùng), tài khoản và vé từ `src/main/resources/db/seed/R__dev_seed_data.sql`: tài khoản `demo@busbooking.local` (USER, có sẵn booking) và `admin@busbooking.local` (ADMIN), mật khẩu `matkhau123`, đã xác minh email; kèm danh mục, chuyến xe và các tài khoản `khach001`…`khach150@busbooking.local`.
 
 **Dừng hệ thống** (không xóa database volume):
 
@@ -94,7 +94,7 @@ Nginx ghi `X-Forwarded-For` từ kết nối trực tiếp. Cấu hình Compose 
 
 **Triển khai trên máy người khác truy cập được.** Trong `.env` đặt thêm:
 
-- `SPRING_PROFILES_ACTIVE=prod`: không nạp dữ liệu demo (tài khoản `admin@busbooking.local` có mật khẩu công khai), tắt Swagger.
+- `SPRING_PROFILES_ACTIVE=prod`: không nạp tài khoản demo (`admin@busbooking.local` có mật khẩu công khai), tắt Swagger. Muốn có danh mục và chuyến mẫu thì đặt thêm `SPRING_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/catalogue`.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH=true`, `SMTP_STARTTLS=true`, `SMTP_FROM`: nhà cung cấp email thật; mặc định gửi vào Mailpit.
 
 Bật HTTPS bằng cách đặt chứng chỉ của tên miền vào `deploy/certs/fullchain.pem` và `deploy/certs/privkey.pem` (ví dụ từ Let's Encrypt; thư mục `deploy/certs/` không được commit), rồi chạy:
@@ -113,7 +113,8 @@ Nginx khi đó nghe cổng 443, cổng 80 chỉ chuyển hướng sang HTTPS, v�
    - **Không có domain (chế độ thử):** đặt `SMTP_FROM=onboarding@resend.dev`. Resend chỉ giao thư tới email của chính tài khoản Resend, gửi cho người khác bị từ chối. Đủ để bạn tự đăng ký và xác minh tài khoản quản trị; người khác đăng ký sẽ không nhận được mã nên không đăng nhập được.
 3. **Render:** New → Blueprint → chọn repo, nhánh. Nhập các giá trị `sync: false`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SMTP_PASSWORD` (API key Resend, dạng `re_...`), `SMTP_FROM` (theo chế độ ở bước 2). Ba secret JWT/OTP do Render tự sinh.
 4. Tên service là duy nhất trên toàn `onrender.com`: `busbooking-api` đã có người khác dùng nên Render gán `busbooking-api-dyfr.onrender.com` (frontend là `busbooking-web.onrender.com`). Nếu URL của bạn khác, sửa trong `render.yaml` cho khớp: `CORS_ALLOWED_ORIGINS` của backend; `buildCommand`, `connect-src` trong CSP và rule rewrite `/api/*` của frontend; **không để trỏ vào tên của người khác**: mật khẩu đăng nhập sẽ bị gửi tới server đó.
-5. **Tài khoản quản trị:** profile `prod` không nạp dữ liệu demo và không cho bootstrap SUPER_ADMIN. Đăng ký và xác minh email một tài khoản qua giao diện, rồi nâng quyền một lần trong SQL Editor của Neon: `UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'SUPER_ADMIN') WHERE email = '<email>';` (chỉ được có một SUPER_ADMIN; sau đó dùng màn quản trị để cấp ADMIN cho người khác).
+5. **Dữ liệu:** `render.yaml` đặt `SPRING_FLYWAY_LOCATIONS` để Flyway nạp danh mục và chuyến mẫu (`src/main/resources/db/catalogue/R__demo_catalogue.sql`, từ 14 ngày trước tới 60 ngày sau ngày chạy), không có tài khoản hay vé. Flyway chỉ chạy lại file khi nội dung file đổi.
+6. **Tài khoản quản trị:** profile `prod` không nạp tài khoản demo và không cho bootstrap SUPER_ADMIN. Đăng ký và xác minh email một tài khoản qua giao diện, rồi nâng quyền một lần trong SQL Editor của Neon: `UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'SUPER_ADMIN') WHERE email = '<email>';` (chỉ được có một SUPER_ADMIN; sau đó dùng màn quản trị để cấp ADMIN cho người khác).
 
 Giới hạn của gói free:
 
@@ -272,7 +273,7 @@ Baseline hiệu năng GET Trip / POST Booking Pha 1 trên Kaggle CPU, script Loc
 | Hiện tượng | Kiểm tra / xử lý |
 |---|---|
 | `Connection refused` PostgreSQL | `docker compose ps` hoặc `docker ps`; kiểm tra đúng **cổng host**, database, user, password và network |
-| Flyway checksum mismatch / missing table | Đối chiếu migration V1–V27 (và `R__dev_seed_data.sql` ở profile `dev`) với lịch sử DB. |
+| Flyway checksum mismatch / missing table | Đối chiếu migration V1–V27 (và `R__demo_catalogue.sql`, `R__dev_seed_data.sql` khi bật dữ liệu demo) với lịch sử DB. |
 | PostgreSQL từ chối múi giờ `Asia/Saigon` | Đặt JVM option `-Duser.timezone=Asia/Ho_Chi_Minh` khi chạy từ IDE hoặc JAR trực tiếp. |
 | Backend không lên vì JWT/OTP secret | Kiểm tra ba secret Base64 độc lập. JWT và HMAC OTP cần ít nhất 32 byte, còn khóa outbox cần đúng 32 byte sau giải mã. |
 | Không nhận OTP | Kiểm tra SMTP, Mailpit và log worker. Khi chạy backend trên host, dùng cổng SMTP publish ra host. Worker thử lại với giãn cách tăng dần, tối đa 8 lần trong thời hạn OTP. |

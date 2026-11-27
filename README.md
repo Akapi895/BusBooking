@@ -64,7 +64,7 @@ src/main/java/com/example/busbooking/
 | Thành phần | Công nghệ và cách sử dụng |
 |---|---|
 | Backend | **Java 21, Spring Boot**, build/chạy bằng Maven Wrapper |
-| Database | **PostgreSQL + Spring Data JPA**; **Flyway V1–V27** quản lý phiên bản schema (profile `dev` nạp thêm dữ liệu demo từ `db/seed`) |
+| Database | **PostgreSQL + Spring Data JPA**; **Flyway V1–V27** quản lý phiên bản schema (dữ liệu demo: danh mục và chuyến ở `db/catalogue`, dùng cho `dev` và Render; tài khoản và vé demo ở `db/seed`, chỉ `dev`) |
 | Bảo mật | **Spring Security, JWT, BCrypt**, email OTP; phân quyền theo vai trò |
 | Tích hợp | **SMTP** gửi OTP; **Mailpit** hỗ trợ kiểm tra email khi phát triển |
 | API và kiểm thử | REST/JSON, Springdoc OpenAPI/Swagger, JUnit, Mockito, Locust |

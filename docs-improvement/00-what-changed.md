@@ -63,7 +63,7 @@ Số liệu đo trước/sau ở [08 — Kết quả Phase 2](08-phase2-results.
 
 ## 6. Giao diện
 
-Frontend tĩnh qua Nginx (`frontend/`): tìm chuyến theo ngày, đăng nhập, đặt và xác nhận vé. Profile `dev` nạp dữ liệu demo (`db/seed/R__dev_seed_data.sql`).
+Frontend tĩnh qua Nginx (`frontend/`): tìm chuyến theo ngày, đăng nhập, đặt và xác nhận vé. Dữ liệu demo nằm ở một chỗ: danh mục và chuyến (`db/catalogue/R__demo_catalogue.sql`) dùng cho profile `dev` và bản deploy Render; tài khoản và vé demo (`db/seed/R__dev_seed_data.sql`) chỉ cho `dev`.
 
 ## Bản đồ tài liệu
 
