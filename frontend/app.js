@@ -21,13 +21,15 @@ const chip = (s) => `<span class="chip ${STATUS[s]?.[1] ?? ''}">${esc(STATUS[s]?
 // Demo only: token in sessionStorage is readable by any script on the page.
 let token = sessionStorage.getItem('token');
 let me = null;
+// '' + '/api' locally (same origin); the backend's own URL on Render, which saves the static-site hop.
+const API = (window.BUSBOOKING_API || '') + '/api';
 
 async function api(path, { method = 'GET', body, idempotencyKey } = {}) {
   const headers = {};
   if (body) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = 'Bearer ' + token;
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  const res = await fetch('/api' + path, { method, headers, body: body && JSON.stringify(body) });
+  const res = await fetch(API + path, { method, headers, body: body && JSON.stringify(body) });
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 401 && token) logout();
@@ -97,7 +99,7 @@ function logout() {
   bookingPage = 0;
   sessionStorage.removeItem('token');
   // Revoke server-side too; plain fetch so a 401 here cannot loop back into logout().
-  if (old) fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + old } }).catch(() => {});
+  if (old) fetch(API + '/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + old } }).catch(() => {});
   refreshUser();
   show('search');
 }

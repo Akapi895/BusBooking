@@ -1,7 +1,8 @@
 # Render Blueprint: free backend (Docker) + free static frontend. Database: Neon (outside Render).
 # Setup and the values to enter in the Dashboard: docs-improvement/06-running-guide.md, "Deploy lên Render + Neon".
 # Service names are global on onrender.com: busbooking-api was already taken, so the API is
-# busbooking-api-dyfr. If your URLs differ, update CORS_ALLOWED_ORIGINS and the /api/* rewrite below.
+# busbooking-api-dyfr. If your URLs differ, update CORS_ALLOWED_ORIGINS, and in busbooking-web the
+# buildCommand, the CSP connect-src and the /api/* rewrite.
 services:
   - type: web
     name: busbooking-api
@@ -68,13 +69,15 @@ services:
   - type: web
     name: busbooking-web
     runtime: static
-    buildCommand: echo "static files, no build"
+    # The browser calls the API service directly (one hop less than the /api rewrite below);
+    # the backend's CORS_ALLOWED_ORIGINS already lists this site.
+    buildCommand: echo 'window.BUSBOOKING_API = "https://busbooking-api-dyfr.onrender.com";' > frontend/config.js
     staticPublishPath: ./frontend
     # Same security headers as deploy/nginx/nginx-app.conf.
     headers:
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        value: "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://busbooking-api-dyfr.onrender.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
@@ -82,7 +85,7 @@ services:
         name: Referrer-Policy
         value: strict-origin-when-cross-origin
     routes:
-      # Same-origin API for the browser, as Nginx does locally.
+      # Fallback for anything still calling /api on this origin; the UI calls the API service directly.
       - type: rewrite
         source: /api/*
         destination: https://busbooking-api-dyfr.onrender.com/api/*
