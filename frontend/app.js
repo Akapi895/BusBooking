@@ -2,7 +2,6 @@
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (v) => Number(v).toLocaleString('vi-VN') + ' ₫';
-const time = (v) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)} ${v.slice(11, 16)}` : '');
 const clock = (v) => (v ? v.slice(11, 16) : '--:--');
 const day = (v) => (v ? new Date(v).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }) : '');
 const dayDiff = (a, b) => Math.round((new Date(b.slice(0, 10)) - new Date(a.slice(0, 10))) / 864e5);
@@ -219,7 +218,6 @@ function openBooking(t) {
   form.passengerName.value = me?.fullName ?? '';
   form.passengerPhone.value = me?.phone ?? '';
   form.quantity.max = t.availableSeats || '';
-  $('#book-trip').textContent = t.id;
   $('#book-route').textContent = `${t.origin} → ${t.destination}`;
   $('#book-when').textContent = `${day(t.departureTime)} · ${clock(t.departureTime)} · ${t.operatorName}`;
   bookStep('step');
@@ -311,25 +309,42 @@ $('#hold-release').addEventListener('click', async () => {
 $('#book-dialog').addEventListener('close', () => clearInterval(startHold.timer));
 
 // ---------- My bookings ----------
+// shortcut: booking history carries only tripId, so each trip is fetched once and cached;
+// add route and departure to BookingHistoryResponse if pages grow past ~20 distinct trips.
+const tripCache = new Map();
+const tripFor = (id) => {
+  if (!tripCache.has(id)) tripCache.set(id, api('/trips/' + id).catch(() => null));
+  return tripCache.get(id);
+};
+
+function bookingCard(b, t) {
+  const actions = (b.status === 'HELD' ? `<button class="primary" data-confirm="${b.id}">Xác nhận</button>` : '')
+    + (b.status === 'CONFIRMED' || b.status === 'HELD' ? `<button class="ghost danger" data-cancel="${b.id}">Huỷ vé</button>` : '');
+  return `
+    <li class="booking">
+      <div class="booking-main">
+        <div class="booking-head"><b>${t ? `${esc(t.origin)} → ${esc(t.destination)}` : `Chuyến #${b.tripId}`}</b>${chip(b.status)}</div>
+        ${t ? `<p>${esc(day(t.departureTime))} · ${clock(t.departureTime)} · ${esc(t.operatorName)}</p>` : ''}
+        ${b.status === 'HELD' && b.holdExpiresAt ? `<p class="deadline">Xác nhận trước ${clock(b.holdExpiresAt)}, nếu không ghế sẽ được trả lại.</p>` : ''}
+        <p><span class="code">${esc(b.bookingCode)}</span> · ${esc(b.passengerName)} · ${b.quantity} ghế</p>
+      </div>
+      <div class="booking-side">
+        <span class="price">${money(b.totalAmount)}</span>
+        <div class="row-actions">${actions}</div>
+      </div>
+    </li>`;
+}
+
 async function loadBookings(page = bookingPage) {
   const request = ++bookingRequest;
   try {
     const list = await api(`/users/me/bookings?page=${page}&size=${pageSize}`);
+    const trips = await Promise.all(list.map((b) => tripFor(b.tripId)));
     if (request !== bookingRequest || !token) return;
     bookingPage = page;
     updatePage('booking', bookingPage, list.length);
-    $('#bookings').innerHTML = list.map((b) => `
-      <tr>
-        <td class="code">${esc(b.bookingCode)}</td>
-        <td>#${b.tripId}</td>
-        <td>${esc(b.passengerName)}</td>
-        <td class="num">${b.quantity}</td>
-        <td class="num">${money(b.totalAmount)}</td>
-        <td>${chip(b.status)}</td>
-        <td>${time(b.bookedAt)}</td>
-        <td><div class="row-actions">${b.status === 'HELD' ? `<button class="primary" data-confirm="${b.id}">Xác nhận</button>` : ''}${
-          b.status === 'CONFIRMED' || b.status === 'HELD' ? `<button class="ghost danger" data-cancel="${b.id}">Huỷ vé</button>` : ''}</div></td>
-      </tr>`).join('') || '<tr><td colspan="8" class="empty-cell">Bạn chưa đặt vé nào. Vào Tìm chuyến để chọn chuyến đầu tiên.</td></tr>';
+    $('#bookings').innerHTML = list.map((b, i) => bookingCard(b, trips[i])).join('')
+      || '<li class="empty">Bạn chưa đặt vé nào. Vào Tìm chuyến để chọn chuyến đầu tiên.</li>';
   } catch (err) { if (request === bookingRequest && token) toast(err.message, true); }
 }
 $('#booking-prev').addEventListener('click', () => loadBookings(bookingPage - 1));

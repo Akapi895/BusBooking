@@ -42,7 +42,7 @@ def snapshot(conn):
         "WHERE r.name = 'USER' AND u.email_verified AND u.status = 'ACTIVE' ORDER BY u.id")]
     routes = [list(r) for r in conn.execute(
         "SELECT DISTINCT r.origin_id, r.destination_id FROM routes r JOIN trips t ON t.route_id = r.id "
-        "WHERE t.status = 'SCHEDULED' AND t.departure_time > now() AT TIME ZONE 'UTC' ORDER BY 1, 2")]
+        "WHERE t.status = 'SCHEDULED' AND t.departure_time > now() AT TIME ZONE 'Asia/Ho_Chi_Minh' ORDER BY 1, 2")]
     seats = dict(conn.execute("SELECT id, available_seats FROM trips").fetchall())
     last_booking = conn.execute("SELECT coalesce(max(id), 0) FROM bookings").fetchone()[0]
     return users, routes, seats, last_booking
@@ -61,7 +61,7 @@ def reconcile(conn, seats_before, last_booking):
     # The expiry job runs every 15 s on each instance; a hold a minute past its deadline means it is not running.
     stale_holds = conn.execute(
         "SELECT count(*) FROM bookings WHERE status = 'HELD' "
-        "AND hold_expires_at < now() AT TIME ZONE 'UTC' - interval '1 minute'").fetchone()[0]
+        "AND hold_expires_at < now() AT TIME ZONE 'Asia/Ho_Chi_Minh' - interval '1 minute'").fetchone()[0]
     bad_money = conn.execute(
         "SELECT count(*) FROM bookings WHERE id > %s AND total_amount <> unit_price * quantity",
         (last_booking,)).fetchone()[0]
