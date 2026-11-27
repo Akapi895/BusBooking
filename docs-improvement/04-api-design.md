@@ -14,45 +14,54 @@
 
 **Nguyên tắc:** Các endpoint public không yêu cầu đăng nhập. Endpoint protected yêu cầu JWT hợp lệ và tài khoản đủ điều kiện. `ADMIN` và `SUPER_ADMIN` sử dụng các API quản trị nghiệp vụ; chỉ `SUPER_ADMIN` được quản lý vai trò. Quyền sở hữu Booking vẫn được kiểm tra tại tầng nghiệp vụ. Bearer token không hợp lệ nếu được gửi tới endpoint public có thể bị chặn theo cấu hình bảo mật hiện tại.
 
-Các mã HTTP thường gặp: `200` (đọc/cập nhật/hủy mềm thành công), `201` (tạo), `202` (tiếp nhận yêu cầu), `204` (thành công không body), `400` (đầu vào không hợp lệ), `401` (chưa xác thực), `403` (không đủ quyền), `404` (không tìm thấy), `409` (xung đột nghiệp vụ), `429` (vượt giới hạn tần suất), `503` (dịch vụ email không khả dụng). Mã và body cụ thể phải theo controller/handler; OpenAPI hiện ghi sai `200` thay vì `201` cho POST Booking và POST Admin Location/Operator/Route/Vehicle.
+Các mã HTTP thường gặp: `200` (đọc/cập nhật/xác nhận/hủy mềm thành công), `201` (tạo), `202` (tiếp nhận yêu cầu), `204` (thành công không body), `400` (đầu vào không hợp lệ), `401` (chưa xác thực), `403` (không đủ quyền), `404` (không tìm thấy), `409` (xung đột nghiệp vụ), `429` (vượt giới hạn tần suất, có `Retry-After`), `503` (tạm thời không phục vụ được: quá tải đặt vé, DB/Redis tạm lỗi — có `Retry-After`; hoặc dịch vụ email không khả dụng). Mã và body cụ thể phải theo controller/handler; OpenAPI hiện ghi sai `200` thay vì `201` cho POST Admin Location/Operator/Route/Vehicle.
+
+Header đáng chú ý: mọi response của `/api/auth/**` và `PUT /api/users/me/password` có `Cache-Control: no-store`; `POST /api/bookings` nhận header tùy chọn `Idempotency-Key` (mục 4.3.4); CORS cho phép header `Authorization`, `Content-Type`, `Idempotency-Key` và cho trình duyệt đọc `Retry-After`.
 
 ## 4.2. Danh sách các API đã triển khai
 
-| # | Method | Endpoint | Nhóm | Quyền truy cập |
-|---:|---|---|---|---|
-| 1 | POST | `/api/auth/register` | Authentication | Public |
-| 2 | POST | `/api/auth/login` | Authentication | Public |
-| 3 | GET | `/api/auth/me` | Authentication | Đăng nhập |
-| 4 | POST | `/api/auth/verify-email` | Authentication | Public |
-| 5 | POST | `/api/auth/resend-verification` | Authentication | Public |
-| 6 | GET | `/api/users/me` | User Profile | Đăng nhập |
-| 7 | PUT | `/api/users/me` | User Profile | Đăng nhập |
-| 8 | GET | `/api/users/me/bookings` | Booking History | USER (lịch sử của mình); ADMIN/SUPER_ADMIN không được truy cập |
-| 9 | GET | `/api/locations` | Public Location | Public |
-| 10 | GET | `/api/trips` | Public Trip | Public |
-| 11 | GET | `/api/trips/{tripId}` | Public Trip | Public |
-| 12 | POST | `/api/bookings` | Booking | USER |
-| 13 | GET | `/api/bookings/{bookingId}` | Booking | Chủ Booking / ADMIN / SUPER_ADMIN |
-| 14 | DELETE | `/api/bookings/{bookingId}` | Booking | Chủ Booking / ADMIN / SUPER_ADMIN |
-| 15 | PUT | `/api/admin/users/{userId}/role` | Role Management | SUPER_ADMIN |
-| 16 | GET | `/api/admin/trips` | Admin Trip | ADMIN / SUPER_ADMIN |
-| 17 | POST | `/api/admin/trips` | Admin Trip | ADMIN / SUPER_ADMIN |
-| 18 | PUT | `/api/admin/trips/{tripId}` | Admin Trip | ADMIN / SUPER_ADMIN |
-| 19 | DELETE | `/api/admin/trips/{tripId}` | Admin Trip | ADMIN / SUPER_ADMIN |
-| 20 | GET | `/api/admin/bookings` | Admin Booking | ADMIN / SUPER_ADMIN |
-| 20a | POST | `/api/admin/bookings/{id}/refund` | Admin Booking | ADMIN / SUPER_ADMIN |
-| 21 | GET | `/api/admin/locations` | Admin Location | ADMIN / SUPER_ADMIN |
-| 22 | POST | `/api/admin/locations` | Admin Location | ADMIN / SUPER_ADMIN |
-| 23 | PUT | `/api/admin/locations/{locationId}` | Admin Location | ADMIN / SUPER_ADMIN |
-| 24 | GET | `/api/admin/operators` | Admin Operator | ADMIN / SUPER_ADMIN |
-| 25 | POST | `/api/admin/operators` | Admin Operator | ADMIN / SUPER_ADMIN |
-| 26 | PUT | `/api/admin/operators/{operatorId}` | Admin Operator | ADMIN / SUPER_ADMIN |
-| 27 | GET | `/api/admin/routes` | Admin Route | ADMIN / SUPER_ADMIN |
-| 28 | POST | `/api/admin/routes` | Admin Route | ADMIN / SUPER_ADMIN |
-| 29 | PUT | `/api/admin/routes/{routeId}` | Admin Route | ADMIN / SUPER_ADMIN |
-| 30 | GET | `/api/admin/vehicles` | Admin Vehicle | ADMIN / SUPER_ADMIN |
-| 31 | POST | `/api/admin/vehicles` | Admin Vehicle | ADMIN / SUPER_ADMIN |
-| 32 | PUT | `/api/admin/vehicles/{vehicleId}` | Admin Vehicle | ADMIN / SUPER_ADMIN |
+Hệ thống có **38 endpoint** REST.
+
+| # | Method | Endpoint | Nhóm | Quyền truy cập | Mô tả |
+|---:|---|---|---|---|---|
+| 1 | POST | `/api/auth/register` | Authentication | Public | Đăng ký USER, gửi OTP xác minh email |
+| 2 | POST | `/api/auth/login` | Authentication | Public | Đăng nhập, nhận JWT |
+| 3 | POST | `/api/auth/verify-email` | Authentication | Public | Xác minh email bằng OTP 6 số |
+| 4 | POST | `/api/auth/resend-verification` | Authentication | Public | Gửi lại OTP xác minh |
+| 5 | POST | `/api/auth/forgot-password` | Authentication | Public | Gửi mã đặt lại mật khẩu |
+| 6 | POST | `/api/auth/reset-password` | Authentication | Public | Đặt lại mật khẩu bằng mã |
+| 7 | POST | `/api/auth/logout` | Authentication | Đăng nhập | Thu hồi mọi JWT đã cấp |
+| 8 | GET | `/api/auth/me` | Authentication | Đăng nhập | Thông tin tài khoản hiện tại |
+| 9 | GET | `/api/users/me` | User Profile | Đăng nhập | Xem profile |
+| 10 | PUT | `/api/users/me` | User Profile | Đăng nhập | Sửa họ tên, điện thoại |
+| 11 | PUT | `/api/users/me/password` | User Profile | Đăng nhập | Đổi mật khẩu |
+| 12 | GET | `/api/users/me/bookings` | Booking History | USER (lịch sử của mình); ADMIN/SUPER_ADMIN không được truy cập | Lịch sử Booking có phân trang |
+| 13 | GET | `/api/locations` | Public Location | Public | Danh sách Location |
+| 14 | GET | `/api/trips` | Public Trip | Public | Tìm chuyến còn ghế |
+| 15 | GET | `/api/trips/{tripId}` | Public Trip | Public | Chi tiết chuyến |
+| 16 | POST | `/api/bookings` | Booking | USER | Giữ ghế (Booking `HELD`) |
+| 17 | GET | `/api/bookings/{bookingId}` | Booking | Chủ Booking / ADMIN / SUPER_ADMIN | Xem Booking |
+| 18 | POST | `/api/bookings/{bookingId}/confirm` | Booking | Chủ Booking / ADMIN / SUPER_ADMIN | Xác nhận Booking `HELD` trước hạn giữ |
+| 19 | DELETE | `/api/bookings/{bookingId}` | Booking | Chủ Booking / ADMIN / SUPER_ADMIN | Hủy Booking, hoàn ghế |
+| 20 | PUT | `/api/admin/users/{userId}/role` | Role Management | SUPER_ADMIN | Đổi role USER ↔ ADMIN |
+| 21 | GET | `/api/admin/trips` | Admin Trip | ADMIN / SUPER_ADMIN | Danh sách chuyến mọi trạng thái |
+| 22 | POST | `/api/admin/trips` | Admin Trip | ADMIN / SUPER_ADMIN | Tạo chuyến |
+| 23 | PUT | `/api/admin/trips/{tripId}` | Admin Trip | ADMIN / SUPER_ADMIN | Sửa chuyến |
+| 24 | DELETE | `/api/admin/trips/{tripId}` | Admin Trip | ADMIN / SUPER_ADMIN | Hủy mềm chuyến |
+| 25 | GET | `/api/admin/bookings` | Admin Booking | ADMIN / SUPER_ADMIN | Danh sách Booking toàn hệ thống |
+| 26 | POST | `/api/admin/bookings/{id}/refund` | Admin Booking | ADMIN / SUPER_ADMIN | Đánh dấu đã hoàn tiền |
+| 27 | GET | `/api/admin/locations` | Admin Location | ADMIN / SUPER_ADMIN | Danh sách Location |
+| 28 | POST | `/api/admin/locations` | Admin Location | ADMIN / SUPER_ADMIN | Tạo Location |
+| 29 | PUT | `/api/admin/locations/{locationId}` | Admin Location | ADMIN / SUPER_ADMIN | Sửa Location |
+| 30 | GET | `/api/admin/operators` | Admin Operator | ADMIN / SUPER_ADMIN | Danh sách nhà xe |
+| 31 | POST | `/api/admin/operators` | Admin Operator | ADMIN / SUPER_ADMIN | Tạo nhà xe |
+| 32 | PUT | `/api/admin/operators/{operatorId}` | Admin Operator | ADMIN / SUPER_ADMIN | Sửa nhà xe |
+| 33 | GET | `/api/admin/routes` | Admin Route | ADMIN / SUPER_ADMIN | Danh sách tuyến |
+| 34 | POST | `/api/admin/routes` | Admin Route | ADMIN / SUPER_ADMIN | Tạo tuyến |
+| 35 | PUT | `/api/admin/routes/{routeId}` | Admin Route | ADMIN / SUPER_ADMIN | Sửa tuyến |
+| 36 | GET | `/api/admin/vehicles` | Admin Vehicle | ADMIN / SUPER_ADMIN | Danh sách phương tiện |
+| 37 | POST | `/api/admin/vehicles` | Admin Vehicle | ADMIN / SUPER_ADMIN | Tạo phương tiện |
+| 38 | PUT | `/api/admin/vehicles/{vehicleId}` | Admin Vehicle | ADMIN / SUPER_ADMIN | Sửa phương tiện |
 
 
 ## 4.3. Hợp đồng và quy tắc nghiệp vụ chính
@@ -103,7 +112,7 @@ Content-Type: application/json
 - Đăng ký và yêu cầu gửi lại ghi vào outbox. Worker gửi và thử lại khi SMTP tạm lỗi. Mã đang còn hiệu lực có thể tiếp tục dùng cho đến khi SMTP chấp nhận mã mới. Gửi lại cách ít nhất 60 giây và trả phản hồi chung để hạn chế dò tìm tài khoản.
 - Mật khẩu lưu dưới dạng hash BCrypt; không trả hash trong JSON. Đăng ký yêu cầu mật khẩu không trắng, tối thiểu 8 ký tự và tối đa 72 byte UTF-8; login yêu cầu mật khẩu không rỗng, tối đa 72 byte UTF-8. JWT chỉ được cấp khi đăng nhập thành công.
 - JWT được xác minh ở security filter; quyền và tình trạng tài khoản được kiểm tra theo dữ liệu hiện hành. Mặc định TTL được mô tả là 24 giờ; giá trị triển khai lấy theo cấu hình.
-- Các endpoint auth áp dụng quota theo IP và endpoint, mặc định register 5, login 10, verify 20 và resend 5 yêu cầu trong 60 giây. Redis chia sẻ bộ đếm giữa các instance khi bật. Vượt quota trả `429 RATE_LIMITED`. Khi Redis không khả dụng, các yêu cầu được giới hạn trả `503 SERVICE_UNAVAILABLE`. Cả hai phản hồi có `Retry-After`.
+- Các endpoint auth áp dụng quota theo IP và endpoint, mặc định register 5, login 10, verify 20 và resend 5 yêu cầu trong 60 giây; `forgot-password` dùng quota resend, `reset-password` dùng quota verify. Login còn giới hạn 5 lần mỗi tài khoản trong cùng cửa sổ. Redis chia sẻ bộ đếm giữa các instance khi bật (`AUTH_RATE_LIMIT_BACKEND=redis`). Vượt quota trả `429 RATE_LIMITED`. Khi Redis không khả dụng, các yêu cầu được giới hạn trả `503 SERVICE_UNAVAILABLE`. Cả hai phản hồi có `Retry-After`.
 
 ### 4.3.2. User Profile, Booking History
 | API | Ý nghĩa | Quy tắc chính |
@@ -141,9 +150,10 @@ Ngày có dạng `YYYY-MM-DD` theo giờ Việt Nam. Phân trang mặc định `
 
 | API | Ý nghĩa | Quy tắc chính |
 |---|---|---|
-| `POST /api/bookings` | Tạo đặt vé | Chỉ USER. Trip phải là `SCHEDULED`, chưa khởi hành và còn đủ ghế. Booking lưu giá hiện hành và giảm ghế trong cùng transaction. |
+| `POST /api/bookings` | Giữ ghế | Chỉ USER. Trip phải là `SCHEDULED`, chưa khởi hành và còn đủ ghế. Booking lưu giá hiện hành, trạng thái `HELD`, `holdExpiresAt` = thời điểm đặt + 10 phút (`booking.hold-minutes`), và giảm ghế trong cùng transaction. |
 | `GET /api/bookings/{bookingId}` | Xem chi tiết | USER chỉ xem Booking của mình; ADMIN/SUPER_ADMIN có thể xem Booking khác |
-| `DELETE /api/bookings/{bookingId}` | Hủy đặt vé | Chủ booking có thể hủy khi còn hơn 30 phút đến giờ đi. ADMIN/SUPER_ADMIN có thể hủy sau mốc này. Mọi yêu cầu vẫn kiểm tra trạng thái booking và sức chứa trước khi hoàn ghế. |
+| `POST /api/bookings/{bookingId}/confirm` | Xác nhận | Chủ booking hoặc ADMIN/SUPER_ADMIN. Booking `HELD` còn hạn và chuyến vẫn `SCHEDULED`, chưa khởi hành → `200` với `CONFIRMED`, `holdExpiresAt = null`. Xác nhận lại Booking đã `CONFIRMED` trả nguyên trạng. Hết hạn giữ (kể cả khi job chưa chạy) trả `409 HOLD_EXPIRED`; trạng thái khác trả `400 BUSINESS_ERROR`. |
+| `DELETE /api/bookings/{bookingId}` | Hủy đặt vé | Hủy được Booking `HELD` hoặc `CONFIRMED`. Chủ booking có thể hủy khi còn hơn 30 phút đến giờ đi. ADMIN/SUPER_ADMIN có thể hủy sau mốc này nhưng không sau giờ đi. Mọi yêu cầu vẫn kiểm tra trạng thái booking và sức chứa trước khi hoàn ghế. |
 
 Ví dụ tạo Booking:
 
@@ -163,11 +173,11 @@ Idempotency-Key: 90cc8547268d49aa8e40df82d39157a3
 }
 ```
 
-Tạo thành công trả `201 Created` với booking `CONFIRMED`. Tên hành khách sau chuẩn hóa dài 1–100 ký tự, điện thoại theo định dạng Việt Nam và số vé là số nguyên dương.
+Tạo thành công trả `201 Created` với booking `HELD` (các trường `id`, `bookingCode`, `tripId`, `passengerName`, `passengerPhone`, `quantity`, `unitPrice`, `totalAmount`, `status`, `bookedAt`, `holdExpiresAt`). Client phải gọi `POST /api/bookings/{bookingId}/confirm` trước `holdExpiresAt`; job chạy mỗi 15 giây (`booking.hold-expiry-interval-ms`) chuyển hold quá hạn sang `EXPIRED` và trả ghế cho chuyến. Tên hành khách sau chuẩn hóa dài 1–100 ký tự, điện thoại theo định dạng Việt Nam và số vé là số nguyên dương.
 
-`Idempotency-Key` là header tùy chọn, dài 1–128 ký tự ASCII hiển thị và có hiệu lực 24 giờ theo từng tài khoản. Khi thử lại cùng nội dung đã chuẩn hóa, API trả `201` với vé đã tạo ban đầu, kèm trạng thái hiện tại của vé (ví dụ `CANCELLED` nếu vé đã bị hủy sau đó). Dùng lại cùng key với nội dung khác trả `409 IDEMPOTENCY_CONFLICT`. Khi nhận `503 SERVICE_UNAVAILABLE` do quá tải hoặc DB tạm thời không sẵn sàng, đợi theo `Retry-After` rồi thử lại với cùng key.
+`Idempotency-Key` là header tùy chọn, dài 1–128 ký tự ASCII hiển thị và có hiệu lực 24 giờ theo từng tài khoản. Khi thử lại cùng nội dung đã chuẩn hóa, API trả `201` với vé đã tạo ban đầu, kèm trạng thái hiện tại của vé (ví dụ `CANCELLED` nếu vé đã bị hủy sau đó). Dùng lại cùng key với nội dung khác trả `409 IDEMPOTENCY_CONFLICT`. Khi nhận `503 SERVICE_UNAVAILABLE` do quá tải (mỗi instance giới hạn số yêu cầu đặt vé đồng thời theo chuyến và tổng cộng, mặc định 8) hoặc DB tạm thời không sẵn sàng, đợi theo `Retry-After` (1 giây) rồi thử lại với cùng key.
 
-Khi tạo booking, PostgreSQL giảm ghế và trả giá bằng một `UPDATE … RETURNING` có điều kiện. Giữ ghế và lưu booking cùng transaction. Khi hủy, hệ thống khóa booking rồi khóa chuyến để kiểm tra sức chứa và hoàn ghế. Hết ghế trả `409 INSUFFICIENT_SEATS`. Chuyến không nhận đặt hoặc không thể hoàn ghế trả `400 BUSINESS_ERROR`. Gửi lại yêu cầu hủy cho vé đã hủy trả `200` với trạng thái `CANCELLED` cho người có quyền truy cập vé. Ghế chỉ được hoàn một lần.
+Khi tạo booking, PostgreSQL giảm ghế và trả giá bằng một `UPDATE … RETURNING` có điều kiện. Giữ ghế và lưu booking cùng transaction. Khi hủy, hệ thống khóa booking rồi khóa chuyến để kiểm tra sức chứa và hoàn ghế. Hết ghế trả `409 INSUFFICIENT_SEATS`. Chuyến không nhận đặt, Booking đã `EXPIRED`/`REFUND_PENDING`/`REFUNDED`, hoặc không thể hoàn ghế trả `400 BUSINESS_ERROR`. Gửi lại yêu cầu hủy cho vé đã hủy trả `200` với trạng thái `CANCELLED` cho người có quyền truy cập vé. Ghế chỉ được hoàn một lần.
 
 ### 4.3.5. Role Management
 
@@ -188,7 +198,7 @@ Sau khi giao dịch đổi quyền thành công, backend ghi sự kiện `role_c
 | API | Tham số / dữ liệu | Quy tắc chính |
 |---|---|---|
 | `GET /api/admin/trips` | `routeId`, `status`, `departureDate` (tùy chọn) | Xem chuyến ở các trạng thái cho quản trị |
-| `POST /api/admin/trips` | `routeId`, `vehicleId`, `departureTime`, `arrivalTime`, `price` | Tạo `SCHEDULED`, số ghế ban đầu theo capacity xe |
+| `POST /api/admin/trips` | `routeId`, `vehicleId`, `departureTime`, `arrivalTime`, `price` | Tạo `SCHEDULED`, số ghế ban đầu theo capacity xe; trả `201`, header `Location: /api/trips/{id}` |
 | `PUT /api/admin/trips/{tripId}` | Các trường Trip tương ứng | Chỉ cập nhật chuyến `SCHEDULED`; áp dụng kiểm tra đổi xe/sức chứa |
 | `DELETE /api/admin/trips/{tripId}` | `tripId` | Hủy mềm Trip; không xóa DB record |
 | `GET /api/admin/bookings` | `userId`, `tripId`, `status`, `page`, `size` (tùy chọn) | Xem danh sách booking toàn hệ thống theo trang; lọc `status=REFUND_PENDING` để xem vé chờ hoàn tiền |
@@ -207,9 +217,9 @@ Ví dụ tạo/cập nhật Trip:
 ```
 
 - Route và Vehicle phải tồn tại và đang hoạt động. Giờ đi phải nằm trong tương lai, giờ đến sau giờ đi. Hai chuyến trên cùng một xe có thể nối tiếp nhưng không được chồng giờ. Chuyến đã hủy được loại khỏi kiểm tra lịch.
-- Chuyến có booking `CONFIRMED` giữ tuyến và giờ đi/đến. Có thể đổi xe nếu đủ sức chứa hoặc đổi giá cho lượt đặt sau. Các booking đã xác nhận giữ nguyên đơn giá.
+- Chuyến có ghế đã được đặt (booking `CONFIRMED` hoặc `HELD` còn hạn) giữ tuyến và giờ đi/đến. Có thể đổi xe nếu đủ sức chứa hoặc đổi giá cho lượt đặt sau. Các booking đã tạo giữ nguyên đơn giá.
 - Chỉ hủy chuyến còn `SCHEDULED` và chưa tới giờ đi; trạng thái khác trả `409 TRIP_CONFLICT`. Hủy lặp chuyến đã `CANCELLED` trả lại trạng thái hiện tại.
-- Khi hủy, mọi booking `CONFIRMED` chuyển sang `REFUND_PENDING` trong cùng transaction và ghế được trả lại. Email thông báo được gửi qua outbox (cột `notice_due_at`), thử lại tối đa 8 lần, mỗi lần cách 5 phút. Khách không tự hủy được vé `REFUND_PENDING`.
+- Khi hủy, mọi booking `CONFIRMED` chuyển sang `REFUND_PENDING`, mọi booking `HELD` chuyển sang `CANCELLED` trong cùng transaction và ghế được trả lại. Email thông báo được gửi qua outbox (cột `notice_due_at`), thử lại tối đa 8 lần, mỗi lần cách 5 phút. Khách không tự hủy được vé `REFUND_PENDING`.
 - Job chuyển chuyến từ `SCHEDULED` sang `IN_PROGRESS` khi đến giờ đi và sang `COMPLETED` khi đến giờ đến. Nếu job chạy trễ, chuyến đã qua giờ đến được chuyển thẳng sang `COMPLETED`.
 - **Không có** API Admin xem Booking riêng theo ID hoặc sửa tùy ý trạng thái Booking: dùng `GET /api/bookings/{bookingId}` và `DELETE /api/bookings/{bookingId}` có sẵn, để không bypass nghiệp vụ hoàn ghế.
 - Chưa có cổng thanh toán: hệ thống chỉ ghi nhận khoản cần hoàn (`total_amount`), việc chuyển tiền do admin làm thủ công.
@@ -260,11 +270,12 @@ Biển số được chuẩn hóa, là duy nhất; sức chứa phải hợp l�
 
 | Nhóm thao tác | Public | USER | ADMIN | SUPER_ADMIN |
 |---|:---:|:---:|:---:|:---:|
-| Đăng ký, đăng nhập, xác minh email, gửi lại OTP | ✓ | ✓ | ✓ | ✓ |
+| Đăng ký, đăng nhập, xác minh email, gửi lại OTP, quên/đặt lại mật khẩu | ✓ | ✓ | ✓ | ✓ |
 | Xem Location, tìm/xem Trip công khai | ✓ | ✓ | ✓ | ✓ |
-| Xem/cập nhật profile của chính mình | – | ✓ | ✓ | ✓ |
+| Xem/cập nhật profile, đổi mật khẩu, đăng xuất | – | ✓ | ✓ | ✓ |
 | Tạo Booking, xem lịch sử của chính mình | – | ✓ | – | – |
-| Xem/hủy Booking của người khác | – | – | ✓ | ✓ |
+| Xem/xác nhận/hủy Booking của chính mình | – | ✓ | ✓ | ✓ |
+| Xem/xác nhận/hủy Booking của người khác | – | – | ✓ | ✓ |
 | Quản trị Location, Operator, Route, Vehicle, Trip, Booking | – | – | ✓ | ✓ |
 | Nâng/hạ role USER ↔ ADMIN | – | – | – | ✓ |
 
@@ -272,11 +283,11 @@ Biển số được chuẩn hóa, là duy nhất; sức chứa phải hợp l�
 
 ### Error response
 
-Ứng dụng sử dụng một định dạng JSON lỗi chung (thông qua các thành phần như `ErrorResponse`, `GlobalExceptionHandler` và các security handlers). **Ví dụ minh họa mã lỗi theo tài liệu implementation; tên trường/mã cụ thể phải đối chiếu response thật:**
+Ứng dụng sử dụng một định dạng JSON lỗi chung `ErrorResponse` (do `GlobalExceptionHandler` và các security handlers tạo): `timestamp` là `OffsetDateTime` giờ Việt Nam (`+07:00`), `status`, `error` (mã lỗi), `message`, `path`, và `details` (map trường → thông báo, chỉ có khi không rỗng, ví dụ với `VALIDATION_ERROR`).
 
 ```json
 {
-  "timestamp": "2026-10-28T00:00:00Z",
+  "timestamp": "2026-10-28T07:00:00+07:00",
   "status": 409,
   "error": "EMAIL_ALREADY_EXISTS",
   "message": "Email is already registered",
@@ -286,19 +297,19 @@ Biển số được chuẩn hóa, là duy nhất; sức chứa phải hợp l�
 
 | HTTP | Tình huống |
 |---:|---|
-| 400 | Request/validation sai, enum/thời gian không hợp lệ; `BUSINESS_ERROR` khi đặt Trip không `SCHEDULED`, hủy Booking lặp hoặc không thể hoàn ghế |
-| 401 | Thiếu/không hợp lệ JWT; thông tin đăng nhập không hợp lệ |
-| 403 | Không đủ vai trò hoặc bị từ chối quyền sở hữu |
-| 404 | Tài nguyên không tồn tại |
-| 409 | Trùng định danh; `TRIP_CONFLICT` khi cập nhật/hủy Trip trái điều kiện; `INSUFFICIENT_SEATS` khi hết ghế; `ACCOUNT_NOT_ELIGIBLE` khi nâng role không đủ điều kiện |
-| 429 | Vượt rate limit xác thực hoặc OTP |
-| 503 | Email delivery tạm không khả dụng |
+| 400 | `VALIDATION_ERROR` khi request/validation sai (kèm `details`), `INVALID_REQUEST` khi body/enum/thời gian không đọc được; `INVALID_VERIFICATION_CODE` khi OTP/mã đặt lại sai; `BUSINESS_ERROR` khi đặt Trip không `SCHEDULED`, xác nhận/hủy Booking sai trạng thái hoặc không thể hoàn ghế |
+| 401 | `UNAUTHORIZED`: thiếu/không hợp lệ JWT; thông tin đăng nhập không hợp lệ (kèm `WWW-Authenticate: Bearer`) |
+| 403 | `FORBIDDEN`: không đủ vai trò hoặc bị từ chối quyền sở hữu |
+| 404 | `NOT_FOUND`: tài nguyên không tồn tại |
+| 409 | Trùng định danh (`EMAIL_/LOCATION_/OPERATOR_/ROUTE_/VEHICLE_ALREADY_EXISTS`); `OPERATOR_IN_USE`, `ROUTE_IN_USE`, `VEHICLE_IN_USE`, `ROUTE_ENDPOINTS_LOCKED`, `VEHICLE_IDENTITY_LOCKED`, `OPERATOR_INACTIVE`; `TRIP_CONFLICT` khi cập nhật/hủy Trip trái điều kiện; `INSUFFICIENT_SEATS` khi hết ghế; `HOLD_EXPIRED` khi xác nhận Booking đã hết hạn giữ; `IDEMPOTENCY_CONFLICT`; `ACCOUNT_NOT_ELIGIBLE` khi nâng role không đủ điều kiện |
+| 429 | `RATE_LIMITED`: vượt rate limit xác thực hoặc thời gian chờ gửi lại OTP; có `Retry-After` |
+| 503 | `SERVICE_UNAVAILABLE` (có `Retry-After: 1`): quá tải đặt vé, DB tạm lỗi/hết thời gian chờ khóa, Redis rate limit không khả dụng; `EMAIL_DELIVERY_UNAVAILABLE`: email delivery tạm không khả dụng |
 
 Kết quả lỗi phải được chuẩn hóa bởi exception/security boundary, không để lộ password hash, OTP, JWT hoặc thông tin nội bộ vào response. CORS chỉ cho phép origin theo cấu hình hiện tại; thông số triển khai kiểm tra tại `SecurityConfig`.
 
 ## 4.5. OpenAPI, Swagger
 
-Swagger UI và JSON OpenAPI phụ thuộc profile/cấu hình đang bật. Bản JSON hiện tại thiếu response `200` cho login, auth/me, profile GET/PUT và đổi role, thiếu schema `LoginResponse`/`CurrentUserResponse`; các request auth/profile chưa thể hiện đầy đủ `required` và validation `@AuthField`. Có 32 operation nghiệp vụ khớp controller; 7 operation `/error` ghi `200` là đặc tả sai của error controller nội bộ, thực tế trả status lỗi từ error dispatch (mặc định 500), không tính là API nghiệp vụ. Các hạn chế này chưa được sửa trong JSON. Với backend local chạy trên cổng `8085`, địa chỉ thường dùng:
+Swagger UI và JSON OpenAPI phụ thuộc profile/cấu hình đang bật (mặc định bật ở `dev`/`test`, tắt ở profile khác trừ khi `API_DOCS_ENABLED=true`). Bản `openapi.json` hiện tại có đủ 38 operation khớp controller, không còn `/error`; nhưng thiếu response `200` cho login, auth/me, profile GET/PUT, đổi role và confirm Booking, ghi `200` thay vì `201` cho POST Admin Location/Operator/Route/Vehicle, thiếu schema `LoginResponse`/`CurrentUserResponse`; các request auth/profile chưa thể hiện đầy đủ `required` và validation `@AuthField`. Các hạn chế này chưa được sửa trong JSON. Với backend local chạy trên cổng `8085`, địa chỉ thường dùng:
 
 - Swagger UI: `http://localhost:8085/swagger-ui/index.html`
 - OpenAPI JSON: `http://localhost:8085/v3/api-docs`

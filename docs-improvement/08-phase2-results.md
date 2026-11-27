@@ -72,7 +72,7 @@ Giới hạn còn lại: đặt vé cho một chuyến đông khách bị nghẽ
 - Danh sách chuyến hiển thị dạng vé: nhà xe, mốc giờ đi, thời gian đi, giờ đến và cuống vé ghi giá. Chuyến được nhóm theo ngày khởi hành.
 - Luồng tài khoản: đăng ký → kích hoạt bằng mã OTP (có gửi lại mã), quên và đặt lại mật khẩu. Lỗi hiện ngay trong form.
 - Khách chưa đăng nhập chọn chuyến thì được đưa sang đăng nhập, sau đó quay lại đặt đúng chuyến đó. Thông tin hành khách điền sẵn từ tài khoản. Đặt xong hiện mã vé.
-- Profile `dev` nạp dữ liệu mẫu qua Flyway ([`R__dev_seed_data.sql`](../src/main/resources/db/seed/R__dev_seed_data.sql)): khoảng 13.600 chuyến, 152 tài khoản và 2.300 vé.
+- Profile `dev` nạp dữ liệu mẫu qua Flyway ([`R__demo_catalogue.sql`](../src/main/resources/db/catalogue/R__demo_catalogue.sql) và [`R__dev_seed_data.sql`](../src/main/resources/db/seed/R__dev_seed_data.sql)): khoảng 13.600 chuyến, 152 tài khoản và 2.300 vé.
 
 ### Chưa làm
 

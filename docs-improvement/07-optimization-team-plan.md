@@ -1,5 +1,7 @@
 # 07 — Kế hoạch tối ưu BusBooking và phân công nhóm
 
+> **Kế hoạch ban đầu của Phase 2, giữ nguyên để đối chiếu.** Thực tế khác kế hoạch ở vài chỗ: outbox dùng PostgreSQL, không có RabbitMQ; Prometheus/Grafana là profile `metrics` trong `compose.yaml`; nhiều backend + Redis ở `deploy/compose.scale.yaml`; cấu hình Nginx ở `deploy/nginx/`. Cách chạy hiện tại xem [06](06-running-guide.md), kết quả xem [08](08-phase2-results.md).
+
 **Mốc so sánh:** commit `fd6b5f3` (đề xuất gắn tag `baseline`). Mọi số liệu trước/sau đều so với mốc này.
 
 **Mục tiêu:** giải quyết các bài toán kiến trúc có thật trong code — consistency, transaction design, concurrency, reliability, event-driven, scale-out — và chứng minh bằng test + benchmark trước/sau.

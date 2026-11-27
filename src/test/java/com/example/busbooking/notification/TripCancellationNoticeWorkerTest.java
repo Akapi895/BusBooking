@@ -30,7 +30,7 @@ class TripCancellationNoticeWorkerTest {
         var sent = org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mail).send(sent.capture());
         assertThat(sent.getValue().getTo()).containsExactly("khach@example.com");
-        assertThat(sent.getValue().getText()).contains("Ha Noi → Hai Phong", "BK-1", "250000.00");
+        assertThat(sent.getValue().getText()).contains("Ha Noi → Hai Phong", "08:00 ngày 02/01/2026", "BK-1", "250000.00");
         verify(notices).sent(7L);
     }
 

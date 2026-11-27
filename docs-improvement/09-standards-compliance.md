@@ -18,7 +18,7 @@ Trạng thái: **Đạt** · **Một phần** (đạt cốt lõi, còn giới h�
 
 | Đặc tính | Trạng thái | Bằng chứng |
 |---|---|---|
-| Phù hợp chức năng | Đạt | 314 test JUnit, gồm test tích hợp trên PostgreSQL thật (`src/test/java/.../integration`, `.../api`) |
+| Phù hợp chức năng | Đạt | 327 test JUnit, gồm test tích hợp trên PostgreSQL thật (`src/test/java/.../integration`, `.../api`) |
 | Hiệu năng | Một phần | SLO và kịch bản tải trong `load-tests/config/acceptance.yaml`, `load-tests/ACCEPTANCE.md`; kết quả trước/sau ở `load-tests/results/phase2-before-after.json`. Chưa có lượt acceptance đầy đủ sau các thay đổi auth |
 | Tương thích | Đạt | REST + JSON, mô tả OpenAPI qua springdoc; chạy bằng Docker Compose |
 | Tương tác (giao diện) | Một phần | Frontend demo tĩnh (`frontend/`); trọng số thấp theo phạm vi đề tài |
@@ -38,8 +38,8 @@ Trạng thái: **Đạt** · **Một phần** (đạt cốt lõi, còn giới h�
 | API5 Broken Function Level Authorization | Đạt | Quy tắc theo method + path, mặc định `denyAll` (`SecurityConfig`) |
 | API6 Unrestricted Access to Sensitive Business Flows | Một phần | Có giới hạn đăng nhập/OTP; chưa giới hạn số vé mỗi tài khoản (một tài khoản đặt được cả chuyến) |
 | API7 SSRF | Không áp dụng | API không gọi URL do người dùng cung cấp |
-| API8 Security Misconfiguration | Một phần | CORS chỉ nhận origin cụ thể; Swagger tắt mặc định; Actuator loopback, `show-details=never`. Nginx frontend chưa đặt header bảo mật (CSP, HSTS) |
-| API9 Improper Inventory Management | Một phần | OpenAPI sinh tự động đúng; `docs/openapi.json` bản lưu đã cũ |
+| API8 Security Misconfiguration | Một phần | CORS chỉ nhận origin cụ thể; Swagger tắt mặc định; Actuator loopback, `show-details=never`; Nginx gửi CSP, `X-Content-Type-Options`, `Referrer-Policy` (`deploy/nginx/nginx-app.conf`), HTTPS + HSTS qua `deploy/compose.tls.yaml`; Compose chỉ publish DB, backend, Mailpit trên loopback. Chứng chỉ TLS do người triển khai cung cấp |
+| API9 Improper Inventory Management | Đạt | OpenAPI sinh tự động (springdoc); `docs-improvement/openapi.json` xuất lại từ `/v3/api-docs`, bỏ `/error` nội bộ |
 | API10 Unsafe Consumption of APIs | Không áp dụng | Chỉ dùng SMTP, PostgreSQL, Redis nội bộ |
 
 ## 3. OWASP ASVS — các nhóm liên quan
@@ -51,7 +51,7 @@ Trạng thái: **Đạt** · **Một phần** (đạt cốt lõi, còn giới h�
 | Kiểm soát truy cập | Đạt | Như API1/API5 |
 | Kiểm tra đầu vào | Đạt | `AuthFieldValidator`, `AuthInputPolicy`, Bean Validation trên DTO |
 | Xử lý lỗi | Đạt | Body lỗi chung, không lộ SQL/stack (`GlobalExceptionHandler`); lỗi 500 được ghi log phía server (`event=unexpected_error`) |
-| Ghi log bảo mật | Một phần | Log `security.audit`: `login_succeeded`, `login_failed`, `login_throttled`, `logout`, `password_changed`, `password_reset`, `password_reset_failed`, `role_changed`. Tài khoản ghi bằng id hoặc 12 ký tự đầu SHA-256 của email. Log chỉ ra stdout, chưa có lưu trữ tập trung |
+| Ghi log bảo mật | Một phần | Log `security.audit`: `login_succeeded`, `login_failed`, `login_throttled`, `logout`, `password_changed`, `password_reset`, `password_reset_failed`; đổi quyền ghi qua logger `RoleChangeAudit`. Tài khoản ghi bằng id hoặc 12 ký tự đầu SHA-256 của email. Log chỉ ra stdout, chưa có lưu trữ tập trung |
 | Chống dò tài khoản | Một phần | Resend OTP và quên mật khẩu trả cùng phản hồi; riêng đăng ký trả `409` khi email đã tồn tại |
 
 ## 4. NIST SP 800-63B — mật khẩu và OTP
@@ -93,9 +93,9 @@ Trạng thái: **Đạt** · **Một phần** (đạt cốt lõi, còn giới h�
 |---|---|---|---|
 | 1 | Đăng ký không lộ email đã tồn tại (trả cùng phản hồi, gửi email báo cho chủ tài khoản) | ASVS, API2 | Trung bình |
 | 2 | Rút ngắn thời hạn access token, thêm refresh token | RFC 8725, ASVS | Trung bình |
-| 3 | Header bảo mật cho Nginx frontend (CSP, HSTS khi có HTTPS, `X-Content-Type-Options`) | API8 | Trung bình |
+| 3 | ~~Header bảo mật cho Nginx frontend~~ Đã làm: `deploy/nginx/nginx-app.conf`, `deploy/compose.tls.yaml` | API8 | Xong |
 | 4 | Giới hạn số vé mỗi tài khoản cho một chuyến | API6 | Cần chốt nghiệp vụ |
 | 5 | Đưa log `security.audit` vào kho log tập trung có thời hạn lưu | ASVS (ghi log) | Thấp |
-| 6 | Cập nhật `docs/openapi.json` từ `/v3/api-docs` | API9 | Thấp |
+| 6 | ~~Cập nhật `openapi.json`~~ Đã làm: xuất lại từ `/v3/api-docs` | API9 | Xong |
 | 7 | Xác thực hai yếu tố cho ADMIN/SUPER_ADMIN | NIST 800-63B (AAL2) | Thấp, ngoài phạm vi hiện tại |
 | 8 | Chạy lại acceptance tải sau các thay đổi auth | ISO 25010 (hiệu năng) | Trung bình |

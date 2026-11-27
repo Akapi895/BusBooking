@@ -1,5 +1,6 @@
 package com.example.busbooking.exception;
 
+import com.example.busbooking.business.service.TravelTime;
 import jakarta.servlet.http.*;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
@@ -17,7 +18,7 @@ public class ApiErrorWriter {
     public ApiErrorWriter(ObjectMapper mapper, Clock clock) { this.mapper = mapper; this.clock = clock; }
 
     public ErrorResponse body(String path, int status, String error, String message, Map<String, String> details) {
-        return new ErrorResponse(clock.instant(), status, error, message, path, details);
+        return new ErrorResponse(clock.instant().atZone(TravelTime.VIETNAM).toOffsetDateTime(), status, error, message, path, details);
     }
 
     public void write(HttpServletRequest request, HttpServletResponse response, int status,

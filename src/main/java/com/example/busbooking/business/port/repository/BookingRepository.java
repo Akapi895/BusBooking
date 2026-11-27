@@ -20,7 +20,6 @@ public interface BookingRepository {
     /** Moves every confirmed booking of the trip to REFUND_PENDING and queues its cancellation email. */
     int markTripRefundPending(Long tripId, java.time.Instant noticeDue);
     Booking markRefunded(Long bookingId, java.time.Instant refundedAt);
-    /** Confirms a HELD booking and clears its hold deadline. */
     Booking confirm(Long bookingId);
     /** Cancels every HELD booking of the trip; the caller restores their seats. */
     int cancelTripHolds(Long tripId);

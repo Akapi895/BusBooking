@@ -1,4 +1,6 @@
 """Exact current controller surface, not a speculative OpenAPI contract."""
+import re
+
 ENDPOINTS = {
     ("GET", "/api/locations"), ("GET", "/api/trips"), ("GET", "/api/trips/{id}"),
     ("POST", "/api/bookings"), ("POST", "/api/bookings/{id}/confirm"), ("GET", "/api/bookings/{id}"), ("DELETE", "/api/bookings/{id}"),
@@ -24,20 +26,17 @@ REQUIRED_CASES = {
 
 
 def canonical(path):
-    import re
     path = path.split("?", 1)[0]
     return re.sub(r"/\d+(?=/|$)", "/{id}", path)
 
 
 def verification_code(text):
-    import re
     # Match the actual SMTP message's code line, not six-digit Instant fractions.
     match = re.search(r"^Mã xác minh email của bạn:\s*([0-9]{6})\s*$", text, re.MULTILINE)
     return match.group(1) if match else None
 
 
 def reset_code(text):
-    import re
     match = re.search(r"^Mã đặt lại mật khẩu của bạn:\s*([0-9]{6})\s*$", text, re.MULTILINE)
     return match.group(1) if match else None
 

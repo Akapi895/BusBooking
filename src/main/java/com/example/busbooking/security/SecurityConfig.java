@@ -52,7 +52,8 @@ public class SecurityConfig {
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key"));
         cors.setExposedHeaders(List.of("Retry-After"));
         cors.setAllowCredentials(false);
-        cors.setMaxAge(600L);
+        // Browsers cache each preflight this long (Chromium caps it at 2 h); fewer OPTIONS round trips.
+        cors.setMaxAge(7200L);
         corsSource.registerCorsConfiguration("/api/**", cors);
         var corsFilter = new CorsFilter(corsSource);
         corsFilter.setCorsProcessor(new JsonCorsProcessor(errors));

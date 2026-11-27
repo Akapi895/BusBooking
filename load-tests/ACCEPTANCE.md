@@ -95,7 +95,7 @@ Chỉnh các tham số của **harness** trong `config/acceptance.yaml`, hoặc 
 
 ### Workload
 
-- `read`: 55% list có lọc origin/destination/date; 35% detail nhiều ID; 5% list không lọc; 5% location. Ghi riêng endpoint/filtered và kích thước response. List hiện không phân trang; harness giữ nguyên và có thể phát hiện đây là bottleneck.
+- `read`: 55% list có lọc origin/destination/date; 35% detail nhiều ID; 5% list không lọc; 5% location. Ghi riêng endpoint/filtered và kích thước response. List phân trang mặc định 20 chuyến; harness kiểm tra mỗi trang không vượt 20.
 - `write`: tạo booking quantity=1 trên các trip/slot phân vùng riêng giữa worker. Mọi 409 là ngoài dự kiến khi còn slot.
 - `mixed`: 65% nhánh đọc ở trên, 20% đặt, 10% history, 5% hủy booking của chính VU; nếu VU chưa có booking để hủy thì đọc. Báo cáo số request thực tế, không coi trọng số là tỷ lệ thực đo chính xác.
 - `hotspot`: worker cố ý dùng chung các trip; mỗi nhóm khoảng 100 lượt chuyển sang trip tiếp theo. Chỉ 409 `INSUFFICIENT_SEATS` là từ chối dự kiến. Báo cáo riêng throughput thành công và throughput từ chối, không gọi mọi request là vé bán được.

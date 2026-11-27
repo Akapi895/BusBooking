@@ -1,0 +1,99 @@
+# Render Blueprint: free backend (Docker) + free static frontend. Database: Neon (outside Render).
+# Setup and the values to enter in the Dashboard: docs-improvement/06-running-guide.md, "Deploy lên Render + Neon".
+# Service names are global on onrender.com: busbooking-api was already taken, so the API is
+# busbooking-api-dyfr. If your URLs differ, update CORS_ALLOWED_ORIGINS, and in busbooking-web the
+# buildCommand, the CSP connect-src and the /api/* rewrite.
+services:
+  - type: web
+    name: busbooking-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Public endpoint: Actuator listens on loopback only.
+    healthCheckPath: /api/trips
+    envVars:
+      # The app listens on 8085; tells Render where to route.
+      - key: PORT
+        value: 8085
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      # Demo catalogue (locations, operators, routes, vehicles, trips; no accounts) from
+      # db/catalogue, the same file the dev profile loads. Leave it out on a new database to start empty.
+      - key: SPRING_FLYWAY_LOCATIONS
+        value: classpath:db/migration,classpath:db/catalogue
+      # Free = 0.1 CPU: SerialGC and C1-only JIT cut startup (440 s -> 385 s measured locally at --cpus 0.1).
+      - key: JAVA_TOOL_OPTIONS
+        value: -Duser.timezone=Asia/Ho_Chi_Minh -XX:+UseSerialGC -XX:TieredStopAtLevel=1
+      # Client IP from Render's proxy X-Forwarded-For, so auth rate limits are per user, not per proxy.
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: native
+      # The frontend calls /api on its own origin; Render rewrites it here with the frontend Origin.
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://busbooking-web.onrender.com
+
+      # Neon: use the direct (non-pooled) host; the pooler drops the per-connection SET statements.
+      # e.g. jdbc:postgresql://ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # Each is a fresh base64 256-bit value (OTP_OUTBOX_SECRET needs exactly 32 bytes).
+      # Regenerating JWT_SECRET logs everyone out; regenerating the OTP keys voids pending codes.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: EMAIL_OTP_SECRET
+        generateValue: true
+      - key: OTP_OUTBOX_SECRET
+        generateValue: true
+
+      # Resend SMTP. Render free blocks outbound 25/465/587, so use Resend's STARTTLS port 2587.
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: 2587
+      - key: SMTP_AUTH
+        value: "true"
+      - key: SMTP_STARTTLS
+        value: "true"
+      # The username is the literal string "resend"; the password is a Resend API key (re_...).
+      - key: SMTP_USERNAME
+        value: resend
+      - key: SMTP_PASSWORD
+        sync: false
+      # With a domain verified in Resend: e.g. no-reply@yourdomain (delivers to anyone).
+      # Without one: onboarding@resend.dev, which delivers only to your own Resend account email.
+      - key: SMTP_FROM
+        sync: false
+
+  - type: web
+    name: busbooking-web
+    runtime: static
+    # The browser calls the API service directly (one hop less than the /api rewrite below);
+    # the backend's CORS_ALLOWED_ORIGINS already lists this site.
+    buildCommand: echo 'window.BUSBOOKING_API = "https://busbooking-api-dyfr.onrender.com";' > frontend/config.js
+    staticPublishPath: ./frontend
+    # Same security headers as deploy/nginx/nginx-app.conf.
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://busbooking-api-dyfr.onrender.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+    routes:
+      # Fallback for anything still calling /api on this origin; the UI calls the API service directly.
+      - type: rewrite
+        source: /api/*
+        destination: https://busbooking-api-dyfr.onrender.com/api/*
+      # SPA fallback; rules do not apply to files that exist.
+      - type: rewrite
+        source: /*
+        destination: /index.html

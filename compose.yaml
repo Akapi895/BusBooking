@@ -1,8 +1,20 @@
+# Local stack: PostgreSQL, backend, frontend Nginx (http://localhost:5173), Mailpit.
+#   docker compose up -d --build
+# Prometheus (http://127.0.0.1:9090) + Grafana (http://127.0.0.1:3000, dashboard "BusBooking"):
+#   docker compose --profile metrics up -d
+# Several backends with a shared Redis rate limit: deploy/compose.scale.yaml. HTTPS: deploy/compose.tls.yaml.
+# Overlay paths are relative to this file: docker compose -f compose.yaml -f deploy/<overlay>.yaml ...
+
+# Fixed project name: volumes and networks are busbooking_*, whichever clone folder runs Compose.
+name: busbooking
+
 services:
   postgres:
     image: postgres:16
     container_name: busbooking-db
     restart: unless-stopped
+    # Lock waits longer than deadlock_timeout (1 s) are written to the server log.
+    command: ["postgres", "-c", "log_lock_waits=on"]
 
     environment:
       POSTGRES_DB: busbooking_dev_fresh
@@ -10,7 +22,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD_required}
 
     ports:
-      - "5435:5432"
+      # Host loopback only: the database must not be reachable from the network.
+      - "127.0.0.1:5435:5432"
 
     volumes:
       - busbooking_data:/var/lib/postgresql/data
@@ -30,12 +43,14 @@ services:
     restart: unless-stopped
 
     ports:
-      - "8086:8085"
+      # Direct API access for local tools only; clients go through Nginx on port 5173.
+      - "127.0.0.1:8086:8085"
       # Actuator (health, metrics incl. hikaricp.*) published to the host's loopback only.
       - "127.0.0.1:8087:8081"
 
     environment:
-      SPRING_PROFILES_ACTIVE: dev
+      # dev seeds demo accounts (known password) and enables Swagger; set SPRING_PROFILES_ACTIVE=prod on a shared server.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
 
       DB_URL: jdbc:postgresql://postgres:5432/busbooking_dev_fresh
       DB_USERNAME: busbooking_user
@@ -45,11 +60,14 @@ services:
       EMAIL_OTP_SECRET: ${EMAIL_OTP_SECRET:?EMAIL_OTP_SECRET_required}
       OTP_OUTBOX_SECRET: ${OTP_OUTBOX_SECRET:?OTP_OUTBOX_SECRET_required}
 
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
-      SMTP_AUTH: "false"
-      SMTP_STARTTLS: "false"
-      SMTP_FROM: no-reply@busbooking.local
+      # Defaults deliver to Mailpit; set the SMTP_* values in .env for a real mail provider.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@busbooking.local}
 
       BOOTSTRAP_SUPER_ADMIN_ENABLED: "false"
 
@@ -62,6 +80,15 @@ services:
       default:
       proxy:
 
+    # The runtime image has no curl/wget; bash's /dev/tcp asks Actuator directly.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      # Startup includes Flyway; rerunning the demo seed on an existing database took ~90 s.
+      start_period: 180s
+
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,26 +98,81 @@ services:
   frontend:
     image: nginx:1.27-alpine
     container_name: busbooking-frontend
+    restart: unless-stopped
     ports:
       - "5173:80"
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/nginx-app.conf:/etc/nginx/snippets/busbooking.conf:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       proxy:
         ipv4_address: 172.31.241.2
 
   mailpit:
-    image: axllent/mailpit:latest
-    container_name: busbooking-docker-mailpit
+    image: axllent/mailpit:v1.21
+    container_name: busbooking-mailpit
+    restart: unless-stopped
 
     ports:
-      - "8026:8025"
+      # Loopback only: the inbox shows every OTP and password reset code.
+      - "127.0.0.1:8026:8025"
+
+  # ---------- Metrics, only with --profile metrics ----------
+  prometheus:
+    profiles: [metrics]
+    image: prom/prometheus:v2.54.1
+    container_name: busbooking-prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - backend
+      - postgres-exporter
+
+  postgres-exporter:
+    profiles: [metrics]
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: busbooking-postgres-exporter
+    environment:
+      DATA_SOURCE_URI: postgres:5432/busbooking_dev_fresh?sslmode=disable
+      DATA_SOURCE_USER: busbooking_user
+      DATA_SOURCE_PASS: ${DB_PASSWORD:?DB_PASSWORD_required}
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+    volumes:
+      - ./deploy/observability/postgres-exporter-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    profiles: [metrics]
+    image: grafana/grafana:11.2.0
+    container_name: busbooking-grafana
+    environment:
+      # Local-only dashboard (bound to loopback): open it without a login.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/busbooking.json
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
 
 volumes:
   busbooking_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   proxy:

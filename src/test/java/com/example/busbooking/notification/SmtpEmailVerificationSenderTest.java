@@ -20,7 +20,7 @@ class SmtpEmailVerificationSenderTest {
         verify(smtp).send(message.capture());
         assertThat(message.getValue().getTo()).containsExactly("hoang@example.com");
         assertThat(message.getValue().getFrom()).isEqualTo("noreply@example.com");
-        assertThat(message.getValue().getText()).contains("012345", "2026-10-22T00:10:00Z");
+        assertThat(message.getValue().getText()).contains("012345", "07:10 ngày 22/10/2026 (giờ Việt Nam)");
     }
 
     @Test

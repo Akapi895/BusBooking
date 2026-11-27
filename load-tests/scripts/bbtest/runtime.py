@@ -1,6 +1,5 @@
 """Owned Linux/Kaggle processes only. Never attaches to an existing database/app."""
 import base64
-import json
 import os
 from pathlib import Path
 import platform
@@ -11,7 +10,6 @@ import subprocess
 import tarfile
 import time
 import urllib.request
-import zipfile
 
 import psycopg
 from psycopg import sql

@@ -1,8 +1,8 @@
 package com.example.busbooking.exception;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
-public record ErrorResponse(Instant timestamp, int status, String error, String message, String path,
+public record ErrorResponse(OffsetDateTime timestamp, int status, String error, String message, String path,
                             @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, String> details) { }

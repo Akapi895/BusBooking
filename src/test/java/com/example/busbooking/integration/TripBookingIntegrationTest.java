@@ -273,6 +273,19 @@ class TripBookingIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bookings WHERE trip_id = ?", Long.class, tripId)).isZero();
     }
 
+    @Test
+    void tripDepartingWithinTheHourCanBeBookedAndKeepsItsVietnamTime() {
+        // Stored times are Vietnam wall clock: a trip one hour away is bookable (it was not while they were UTC).
+        LocalDateTime departure = LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).plusHours(1).withNano(0);
+        Long soon = insertTrip(departure, 3, "SCHEDULED");
+
+        var booking = bookingService.create(userId, soon, "Soon Passenger", "0901234567", 1, null);
+
+        assertThat(booking.getId()).isNotNull();
+        assertThat(jdbc.queryForObject("SELECT departure_time FROM trips WHERE id = ?", LocalDateTime.class, soon))
+                .isEqualTo(departure);
+    }
+
     private Long roleId(String name) {
         return jdbc.queryForObject("SELECT id FROM roles WHERE name = ?", Long.class, name);
     }
