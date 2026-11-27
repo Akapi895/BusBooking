@@ -1,3 +1,9 @@
+# Local stack: PostgreSQL, backend, frontend Nginx (http://localhost:5173), Mailpit.
+#   docker compose up -d --build
+# Prometheus (http://127.0.0.1:9090) + Grafana (http://127.0.0.1:3000, dashboard "BusBooking"):
+#   docker compose --profile metrics up -d
+# Several backends with a shared Redis rate limit: compose.scale.yaml. HTTPS: compose.tls.yaml.
+
 # Fixed project name: volumes and networks are busbooking_*, whichever clone folder runs Compose.
 name: busbooking
 
@@ -6,6 +12,8 @@ services:
     image: postgres:16
     container_name: busbooking-db
     restart: unless-stopped
+    # Lock waits longer than deadlock_timeout (1 s) are written to the server log.
+    command: ["postgres", "-c", "log_lock_waits=on"]
 
     environment:
       POSTGRES_DB: busbooking_dev_fresh
@@ -111,8 +119,58 @@ services:
       # Loopback only: the inbox shows every OTP and password reset code.
       - "127.0.0.1:8026:8025"
 
+  # ---------- Metrics, only with --profile metrics ----------
+  prometheus:
+    profiles: [metrics]
+    image: prom/prometheus:v2.54.1
+    container_name: busbooking-prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - backend
+      - postgres-exporter
+
+  postgres-exporter:
+    profiles: [metrics]
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: busbooking-postgres-exporter
+    environment:
+      DATA_SOURCE_URI: postgres:5432/busbooking_dev_fresh?sslmode=disable
+      DATA_SOURCE_USER: busbooking_user
+      DATA_SOURCE_PASS: ${DB_PASSWORD:?DB_PASSWORD_required}
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+    volumes:
+      - ./observability/postgres-exporter-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    profiles: [metrics]
+    image: grafana/grafana:11.2.0
+    container_name: busbooking-grafana
+    environment:
+      # Local-only dashboard (bound to loopback): open it without a login.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/busbooking.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   busbooking_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   proxy:

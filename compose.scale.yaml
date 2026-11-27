@@ -1,6 +1,6 @@
 # Several backends behind the frontend Nginx, auth rate limit shared through Redis:
-#   docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml up -d --scale backend=3
-# Add -f compose.observability.yaml for Prometheus/Grafana (it discovers every replica by DNS).
+#   docker compose -f compose.yaml -f compose.scale.yaml up -d --scale backend=3
+# Add --profile metrics for Prometheus/Grafana (it discovers every replica by DNS).
 # Nginx resolves "backend" once at start-up and round-robins over the replicas it found,
 # so restart the frontend service after changing the replica count.
 services:
@@ -8,3 +8,33 @@ services:
     # Replicas cannot share a container name or host ports; reach them through Nginx (port 5173).
     container_name: !reset null
     ports: !reset []
+    environment:
+      AUTH_RATE_LIMIT_BACKEND: redis
+      SPRING_DATA_REDIS_HOST: redis
+      # Report the backend DOWN when the shared rate-limit store is unreachable.
+      MANAGEMENT_HEALTH_REDIS: "true"
+    networks:
+      rate-limit-store:
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      rate-limit-store:
+    volumes:
+      - auth_limits:/data
+
+networks:
+  rate-limit-store:
+    internal: true
+
+volumes:
+  auth_limits:

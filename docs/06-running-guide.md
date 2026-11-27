@@ -85,13 +85,7 @@ Thoát chế độ xem log bằng `Ctrl+C` (không dừng container).
 docker compose down
 ```
 
-**Dùng chung quota xác thực qua Redis.** Khởi chạy Compose với tệp bổ sung:
-
-```powershell
-docker compose -f compose.yaml -f compose.auth-rate-limit.yaml up -d --build
-```
-
-Redis chạy trên mạng riêng của Compose. Backend mặc định dùng bộ đếm local, còn tệp bổ sung bật `AUTH_RATE_LIMIT_BACKEND=redis`. Khi triển khai nhiều backend, dùng chung Redis, `AUTH_RATE_REDIS_PREFIX` và các giá trị quota. Có thể cấu hình kết nối Redis ngoài Compose bằng các biến `SPRING_DATA_REDIS_*`.
+**Dùng chung quota xác thực qua Redis.** `compose.scale.yaml` (xem mục 6.6) thêm Redis trên mạng riêng của Compose và bật `AUTH_RATE_LIMIT_BACKEND=redis`; backend chạy một mình dùng bộ đếm local. Khi triển khai nhiều backend, dùng chung Redis, `AUTH_RATE_REDIS_PREFIX` và các giá trị quota. Có thể cấu hình kết nối Redis ngoài Compose bằng các biến `SPRING_DATA_REDIS_*`.
 
 Nginx ghi `X-Forwarded-For` từ kết nối trực tiếp. Cấu hình Compose tin địa chỉ proxy `172.31.241.2`. Khi triển khai ở mạng khác, dùng địa chỉ chính xác của proxy tin cậy và cấu hình proxy ghi đè header do client gửi.
 
@@ -201,18 +195,18 @@ Với backend local cổng 8085 hoặc Compose publish 8086, khi tài liệu API
 
 Actuator chạy trên cổng quản trị riêng (`MANAGEMENT_PORT`, mặc định 8081) và chỉ nghe `127.0.0.1` (`MANAGEMENT_ADDRESS`); cổng API 8085/8086 không phục vụ `/actuator`. Chỉ mở `health`, `metrics` và `prometheus` (bản scrape cho Prometheus); health không hiện chi tiết và không tính SMTP. Khi dùng Redis cho rate limit, đặt `MANAGEMENT_HEALTH_REDIS=true` để health phản ánh Redis.
 
-**Prometheus và Grafana.** Ghép `compose.observability.yaml` để thu metric của mọi backend (tìm theo DNS tên dịch vụ `backend`), PostgreSQL qua `postgres_exporter` (gồm số lock đang chờ) và bật `log_lock_waits`:
+**Prometheus và Grafana.** Bật profile `metrics` để thu metric của mọi backend (tìm theo DNS tên dịch vụ `backend`) và PostgreSQL qua `postgres_exporter` (gồm số lock đang chờ). PostgreSQL luôn bật `log_lock_waits`:
 
 ```powershell
-docker compose -f compose.yaml -f compose.observability.yaml up -d
+docker compose --profile metrics up -d
 ```
 
 Prometheus ở http://127.0.0.1:9090, Grafana ở http://127.0.0.1:3000 (dashboard `BusBooking`, xem không cần đăng nhập, chỉ nghe loopback): request/s và mã phản hồi, p95/p99 theo endpoint, request/s theo instance, kết nối Hikari đang chờ/đang dùng, lock PostgreSQL đang chờ, heap JVM.
 
-**Chạy nhiều backend sau Nginx.** `compose.scale.yaml` bỏ tên container và cổng publish của backend để chạy nhiều replica; frontend Nginx chia request cho mọi replica, rate limit auth dùng chung qua Redis:
+**Chạy nhiều backend sau Nginx.** `compose.scale.yaml` bỏ tên container và cổng publish của backend để chạy nhiều replica, thêm Redis để rate limit auth dùng chung; frontend Nginx chia request cho mọi replica:
 
 ```powershell
-docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml -f compose.observability.yaml up -d --scale backend=3
+docker compose -f compose.yaml -f compose.scale.yaml --profile metrics up -d --scale backend=3
 ```
 
 Nginx chỉ phân giải tên `backend` lúc khởi động, nên đổi số replica xong phải restart service `frontend`. Truy cập API qua http://localhost:5173/api.

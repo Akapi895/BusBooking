@@ -126,7 +126,7 @@ Mỗi cấu hình khởi động từ một DB riêng với cùng cách sinh d�
 
 Dựng cụm (thêm `--scale backend=1` hoặc `3`), rồi chạy Locust phân tán qua Nginx. Script đối soát ghế với DB và lấy số liệu từ Prometheus:
 
-    docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml -f compose.observability.yaml up -d --scale backend=3
+    docker compose -f compose.yaml -f compose.scale.yaml --profile metrics up -d --scale backend=3
     cd load-tests/scripts
     python run_soak.py --dsn postgresql://busbooking_user:PW@127.0.0.1:5435/busbooking_dev_fresh --jwt-secret "$JWT_SECRET" \
         --label 3-backend --minutes 30 --users 300 --spawn-rate 30 --think-min 0.2 --think-max 0.6 --out ../results/soak/3-backend

@@ -64,7 +64,7 @@ jobs:
           persist-credentials: false
       # Catches a broken Dockerfile or compose file that the Maven tests would not.
       - run: docker build -t busbooking:ci .
-      - run: docker compose -f compose.yaml -f compose.auth-rate-limit.yaml -f compose.scale.yaml -f compose.observability.yaml -f compose.tls.yaml config --quiet
+      - run: docker compose -f compose.yaml -f compose.scale.yaml -f compose.tls.yaml --profile metrics config --quiet
         env:
           DB_PASSWORD: ci
           JWT_SECRET: ci
