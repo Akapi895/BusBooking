@@ -2,6 +2,7 @@ package com.example.busbooking.notification;
 
 import com.example.busbooking.business.port.notification.EmailVerificationSender;
 import com.example.busbooking.domain.exception.EmailDeliveryException;
+import com.example.busbooking.business.service.TravelTime;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -23,8 +24,8 @@ public final class SmtpEmailVerificationSender implements EmailVerificationSende
         message.setTo(email);
         message.setSubject("Xác minh email — Bus Booking");
         message.setText("Mã xác minh email của bạn: " + code
-                + "\nMã có hiệu lực trong 10 phút, đến " + expiresAt
-                + " (UTC).\nKhông chia sẻ mã này với người khác."
+                + "\nMã có hiệu lực trong 10 phút, đến " + TravelTime.display(expiresAt)
+                + " (giờ Việt Nam).\nKhông chia sẻ mã này với người khác."
                 + "\nNếu bạn không đăng ký, hãy bỏ qua email này.");
         try { sender.send(message); }
         catch (MailException failure) {

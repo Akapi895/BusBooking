@@ -20,6 +20,9 @@ RUN groupadd --system app && useradd --system --gid app --no-create-home app
 
 COPY --from=build /app/target/*.jar app.jar
 
+# Logs and JVM-clock timestamps (@CreationTimestamp) in Vietnam time.
+ENV TZ=Asia/Ho_Chi_Minh
+
 USER app
 
 EXPOSE 8085

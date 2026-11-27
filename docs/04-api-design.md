@@ -276,7 +276,7 @@ Biển số được chuẩn hóa, là duy nhất; sức chứa phải hợp l�
 
 ```json
 {
-  "timestamp": "2026-10-28T00:00:00Z",
+  "timestamp": "2026-10-28T07:00:00+07:00",
   "status": 409,
   "error": "EMAIL_ALREADY_EXISTS",
   "message": "Email is already registered",

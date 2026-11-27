@@ -13,12 +13,12 @@
 CREATE FUNCTION pg_temp.h(key text, n integer) RETURNS integer
     LANGUAGE sql IMMUTABLE AS $$ SELECT (abs(hashtext(key)::bigint) % n)::integer $$;
 
--- The app stores every timestamp column in UTC (hibernate.jdbc.time_zone=UTC, Clock.systemUTC()).
--- Timetables are planned in Vietnam time and converted on write; "now" is compared in UTC too.
+-- Wall-clock columns (TIMESTAMP) hold Vietnam time, like the app (see V27).
+-- utc()/utc_now() keep their old names so the rest of the script is unchanged; both are Vietnam time now.
 CREATE FUNCTION pg_temp.utc(vn_local timestamp) RETURNS timestamp
-    LANGUAGE sql IMMUTABLE AS $$ SELECT (vn_local AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'UTC' $$;
+    LANGUAGE sql IMMUTABLE AS $$ SELECT vn_local $$;
 CREATE FUNCTION pg_temp.utc_now() RETURNS timestamp
-    LANGUAGE sql STABLE AS $$ SELECT now() AT TIME ZONE 'UTC' $$;
+    LANGUAGE sql STABLE AS $$ SELECT now() AT TIME ZONE 'Asia/Ho_Chi_Minh' $$;
 CREATE FUNCTION pg_temp.vn_today() RETURNS date
     LANGUAGE sql STABLE AS $$ SELECT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date $$;
 

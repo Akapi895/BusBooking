@@ -1,5 +1,6 @@
 package com.example.busbooking.notification;
 
+import com.example.busbooking.business.service.TravelTime;
 import com.example.busbooking.data.adapter.TripCancellationNotices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +55,7 @@ public class TripCancellationNoticeWorker {
         message.setSubject("Chuyến xe đã bị hủy — Bus Booking");
         message.setText("Xin chào " + notice.passengerName() + ","
                 + "\n\nChuyến " + notice.origin() + " → " + notice.destination()
-                + " khởi hành lúc " + notice.departure() + " (giờ Việt Nam) đã bị hủy."
+                + " khởi hành lúc " + TravelTime.display(notice.departure()) + " (giờ Việt Nam) đã bị hủy."
                 + "\nVé " + notice.bookingCode() + " của bạn sẽ được hoàn " + notice.refund().toPlainString() + " VND."
                 + "\nChúng tôi sẽ liên hệ khi hoàn tiền xong. Xin lỗi vì sự bất tiện này.");
         return message;
