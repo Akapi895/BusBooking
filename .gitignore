@@ -38,5 +38,5 @@ build/
 ### VS Code ###
 .vscode/
 
-# TLS certificate and key for compose.tls.yaml
-certs/
+# TLS certificate and key for deploy/compose.tls.yaml
+deploy/certs/
