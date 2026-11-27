@@ -14,7 +14,6 @@ public interface UserRepository {
     User save(User user);
     Optional<User> updateProfile(Long userId, String fullName, String phone);
     Optional<User> findSuperAdmin();
-    /** Invalidates every access token issued to the user so far. */
     void revokeTokens(Long userId);
     /** Stores a new hash and revokes earlier tokens; false when the account is no longer active and verified. */
     boolean changePassword(Long userId, String passwordHash);
