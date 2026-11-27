@@ -1,7 +1,7 @@
 # Render Blueprint: free backend (Docker) + free static frontend. Database: Neon (outside Render).
 # Setup and the values to enter in the Dashboard: docs-improvement/06-running-guide.md, "Deploy lên Render + Neon".
-# If Render gives a service a different URL than <name>.onrender.com, update CORS_ALLOWED_ORIGINS
-# and the /api/* rewrite below to match.
+# Service names are global on onrender.com: busbooking-api was already taken, so the API is
+# busbooking-api-dyfr. If your URLs differ, update CORS_ALLOWED_ORIGINS and the /api/* rewrite below.
 services:
   - type: web
     name: busbooking-api
@@ -83,7 +83,7 @@ services:
       # Same-origin API for the browser, as Nginx does locally.
       - type: rewrite
         source: /api/*
-        destination: https://busbooking-api.onrender.com/api/*
+        destination: https://busbooking-api-dyfr.onrender.com/api/*
       # SPA fallback; rules do not apply to files that exist.
       - type: rewrite
         source: /*

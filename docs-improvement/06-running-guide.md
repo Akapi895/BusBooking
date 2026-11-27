@@ -110,7 +110,7 @@ Nginx khi đó nghe cổng 443, cổng 80 chỉ chuyển hướng sang HTTPS, v�
 1. **Neon:** tạo project (region Singapore) và lấy chuỗi kết nối của endpoint **direct**, không phải *pooled*, vì pooler bỏ các lệnh `SET lock_timeout`/`SET TIME ZONE` mà Hikari chạy cho mỗi kết nối. Đổi sang dạng JDBC: `jdbc:postgresql://<host>/<db>?sslmode=require`.
 2. **Brevo:** xác minh địa chỉ gửi, tạo SMTP key. Render free chặn cổng 25/465/587 nên `render.yaml` dùng cổng 2525.
 3. **Render:** New → Blueprint → chọn repo, nhánh. Nhập các giá trị `sync: false`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SMTP_USERNAME` (login SMTP của Brevo), `SMTP_PASSWORD` (SMTP key), `SMTP_FROM`. Ba secret JWT/OTP do Render tự sinh.
-4. Nếu Render đặt URL khác `busbooking-api.onrender.com` / `busbooking-web.onrender.com` (tên đã có người dùng), sửa `CORS_ALLOWED_ORIGINS` và rule rewrite `/api/*` trong `render.yaml` cho khớp.
+4. Tên service là duy nhất trên toàn `onrender.com`: `busbooking-api` đã có người khác dùng nên Render gán `busbooking-api-dyfr.onrender.com` (frontend là `busbooking-web.onrender.com`). Nếu URL của bạn khác, sửa `CORS_ALLOWED_ORIGINS` và rule rewrite `/api/*` trong `render.yaml` cho khớp, **không để trỏ vào tên của người khác**: mật khẩu đăng nhập sẽ bị gửi tới server đó.
 5. **Tài khoản quản trị:** profile `prod` không nạp dữ liệu demo và không cho bootstrap SUPER_ADMIN. Đăng ký và xác minh email một tài khoản qua giao diện, rồi nâng quyền một lần trong SQL Editor của Neon: `UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'SUPER_ADMIN') WHERE email = '<email>';` (chỉ được có một SUPER_ADMIN; sau đó dùng màn quản trị để cấp ADMIN cho người khác).
 
 Giới hạn của gói free:
