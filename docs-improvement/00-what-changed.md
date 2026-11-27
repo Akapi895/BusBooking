@@ -53,7 +53,7 @@ Số liệu đo trước/sau ở [08 — Kết quả Phase 2](08-phase2-results.
 | HTTPS, header bảo mật (CSP, HSTS…) | `deploy/compose.tls.yaml`, `deploy/nginx/` |
 | Cổng database, backend, Mailpit chỉ mở trên loopback; profile `prod` không nạp dữ liệu demo | `compose.yaml` |
 | Image chạy user không phải root, có healthcheck, múi giờ Việt Nam | `Dockerfile`, `compose.yaml` |
-| Deploy miễn phí lên Render + Neon + Resend | `render.yaml`, [06](06-running-guide.md) |
+| Deploy miễn phí lên Render + Neon + Brevo | `render.yaml`, [06](06-running-guide.md) |
 | CI: test với PostgreSQL và Redis, build Docker image, kiểm tra file compose | `.github/workflows/ci.yml` |
 
 ## 5. Kiểm thử

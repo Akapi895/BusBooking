@@ -331,6 +331,6 @@ flowchart LR
 - **Overlay:** `deploy/compose.scale.yaml` chạy nhiều backend (`--scale backend=N`) sau Nginx và chuyển giới hạn tần suất xác thực sang Redis dùng chung; `deploy/compose.tls.yaml` bật HTTPS tại Nginx (80 chuyển hướng sang 443, có HSTS) với chứng chỉ trong `deploy/certs/`.
 - **Actuator:** chạy trên cổng quản trị riêng `8081`, mặc định chỉ lắng nghe loopback (`management.server.address=127.0.0.1`); Compose mở trong container để healthcheck/Prometheus dùng nhưng chỉ publish ra loopback của host. Endpoint mở: `health`, `metrics`, `prometheus`.
 - **Dockerfile:** build Maven nhiều stage, image chạy bằng user không phải root, `TZ=Asia/Ho_Chi_Minh`, heap theo `MaxRAMPercentage=75`.
-- **Render (`render.yaml`):** backend Docker gói free (`busbooking-api`, health check `/api/trips` vì Actuator chỉ ở loopback) và frontend tĩnh (`busbooking-web`) rewrite `/api/*` sang backend; database ở Neon (ngoài Render); email qua Resend SMTP cổng `2587` (STARTTLS) vì Render free chặn 25/465/587.
+- **Render (`render.yaml`):** backend Docker gói free (`busbooking-api`, health check `/api/trips` vì Actuator chỉ ở loopback) và frontend tĩnh (`busbooking-web`) rewrite `/api/*` sang backend; database ở Neon (ngoài Render); email qua Brevo SMTP cổng `2525` vì Render free chặn 25/465/587.
 - **Kaggle CPU:** bài kiểm thử tải Pha 1 chạy Java, PostgreSQL và Locust trong notebook, **không phải sơ đồ triển khai Docker production**. Xem [`../load-tests/README.md`](../load-tests/README.md) để biết baseline.
 
