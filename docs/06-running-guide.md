@@ -108,6 +108,19 @@ docker compose -f compose.yaml -f compose.tls.yaml up -d --build
 
 Nginx khi đó nghe cổng 443, cổng 80 chỉ chuyển hướng sang HTTPS, và gửi HSTS. Mọi cấu hình Nginx đều gửi CSP, `X-Content-Type-Options` và `Referrer-Policy`.
 
+**Deploy lên Render + Neon (miễn phí).** `render.yaml` mô tả backend (Docker, gói free, profile `prod`) và frontend (static site, rewrite `/api/*` sang backend để trình duyệt vẫn gọi cùng origin). Database dùng Neon, email dùng Brevo.
+
+1. **Neon:** tạo project (region Singapore) và lấy chuỗi kết nối của endpoint **direct**, không phải *pooled*, vì pooler bỏ các lệnh `SET lock_timeout`/`SET TIME ZONE` mà Hikari chạy cho mỗi kết nối. Đổi sang dạng JDBC: `jdbc:postgresql://<host>/<db>?sslmode=require`.
+2. **Brevo:** xác minh địa chỉ gửi, tạo SMTP key. Render free chặn cổng 25/465/587 nên `render.yaml` dùng cổng 2525.
+3. **Render:** New → Blueprint → chọn repo, nhánh. Nhập các giá trị `sync: false`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SMTP_USERNAME` (login SMTP của Brevo), `SMTP_PASSWORD` (SMTP key), `SMTP_FROM`. Ba secret JWT/OTP do Render tự sinh.
+4. Nếu Render đặt URL khác `busbooking-api.onrender.com` / `busbooking-web.onrender.com` (tên đã có người dùng), sửa `CORS_ALLOWED_ORIGINS` và rule rewrite `/api/*` trong `render.yaml` cho khớp.
+5. **Tài khoản quản trị:** profile `prod` không nạp dữ liệu demo và không cho bootstrap SUPER_ADMIN. Đăng ký và xác minh email một tài khoản qua giao diện, rồi nâng quyền một lần trong SQL Editor của Neon: `UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'SUPER_ADMIN') WHERE email = '<email>';` (chỉ được có một SUPER_ADMIN; sau đó dùng màn quản trị để cấp ADMIN cho người khác).
+
+Giới hạn của gói free:
+
+- Backend ngủ sau 15 phút không có request. Đo local với `--cpus 0.1 --memory 512m`: khởi động mất khoảng 6–7 phút (lần đầu kèm migration khoảng 7 phút), RAM khoảng 375 MB. Render có thể cấp CPU nhanh hơn mức giới hạn cứng này, nhưng nên mở trang trước buổi demo vài phút. Email OTP trong outbox chỉ được gửi khi backend đang thức.
+- Rate limit theo IP đọc `X-Forwarded-For` (`SERVER_FORWARD_HEADERS_STRATEGY=native`) và chỉ tin proxy trong dải địa chỉ nội bộ. Sau khi deploy, thử đăng nhập sai từ hai mạng khác nhau: nếu mạng thứ hai cũng bị `429` ngay thì proxy của Render nằm ngoài dải đó.
+
 > **Không dùng `docker compose down -v`** khi muốn giữ dữ liệu. Compose hiện có backend service; khi dùng cách 2 để chạy Java local, dừng backend Compose nếu đang chạy (`docker compose stop backend`), chỉ khởi động `postgres` và dùng SMTP truy cập được từ host theo mục 6.5.
 
 ## 6.5. Cách 2: Chạy Spring Boot trực tiếp trên Windows
