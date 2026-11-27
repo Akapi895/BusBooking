@@ -6,7 +6,8 @@
 - **Spring Boot backend:** REST API, mặc định ở `http://localhost:8085` khi chạy local với cấu hình hiện dùng.
 - **PostgreSQL:** lưu tài khoản, danh mục, chuyến xe và booking; **Flyway** thực thi/kiểm tra migration khi ứng dụng khởi động.
 - **SMTP:** dùng để gửi mã xác thực email (OTP). Có thể dùng **Mailpit** để kiểm tra email trong môi trường phát triển.
-- **Swagger/OpenAPI:** thử các endpoint; trong Pha 1 hệ thống có **32 REST API** theo phạm vi đã chốt.
+- **Frontend Nginx:** phục vụ giao diện tĩnh trong `frontend/` và chuyển `/api/` sang backend; Compose publish ở `http://localhost:5173`.
+- **Swagger/OpenAPI:** thử các endpoint; hệ thống hiện có **38 endpoint REST** (xem [Thiết kế API](04-api-design.md)).
 
 ## 6.2. Yêu cầu môi trường
 
@@ -29,15 +30,15 @@ docker compose version
 
 ## 6.3. Chuẩn bị cấu hình
 
-1. Clone repository, mở PowerShell ở thư mục `busbooking/`.
-2. Kiểm tra `compose.yaml`, `.env.example` và `src/main/resources/application*.properties` trước khi chạy.
-3. Nếu Compose sử dụng `.env`, sao chép mẫu và **tự điền các giá trị còn thiếu**, không đưa mật khẩu/secret thật lên GitHub:
+1. Clone repository, mở PowerShell ở thư mục gốc repository (nơi có `compose.yaml`, `pom.xml`).
+2. Kiểm tra `compose.yaml`, `.env.docker.example` (cho Compose), `.env.example` (danh sách biến khi chạy Maven trực tiếp) và `src/main/resources/application*.properties` trước khi chạy.
+3. Compose tự đọc `.env` ở thư mục gốc. Sao chép mẫu dành cho Compose và **tự điền các giá trị còn thiếu** (`DB_PASSWORD`, `JWT_SECRET`, `EMAIL_OTP_SECRET`, `OTP_OUTBOX_SECRET`), không đưa mật khẩu/secret thật lên GitHub:
 
    ```powershell
-   if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+   if (-not (Test-Path .env)) { Copy-Item .env.docker.example .env }
    ```
 
-   Chỉ dùng lệnh này khi `.env.example` có tồn tại; `.env` là cấu hình cá nhân và phải được `.gitignore` loại trừ.
+   `.env` là cấu hình cá nhân và đã được `.gitignore` loại trừ.
 4. Tạo ba secret độc lập. `JWT_SECRET` và `EMAIL_OTP_SECRET` phải là Base64 giải mã ra ít nhất 32 byte. `OTP_OUTBOX_SECRET` phải giải mã ra đúng 32 byte. Dùng cùng giá trị outbox trên mọi instance chung DB và giữ giá trị ổn định qua các lần khởi động khi vẫn còn email chờ gửi.
 
    | Nhóm | Biến tiêu biểu |
@@ -52,7 +53,7 @@ docker compose version
 
 ## 6.4. Cách 1: Chạy bằng Docker Compose (khuyến nghị)
 
-**Bước 1.** Kiểm tra Compose hợp lệ và xem tên service thực tế: `compose.yaml` có `postgres`, `backend`, `mailpit`; PostgreSQL publish `127.0.0.1:5435:5432`, backend `127.0.0.1:8086:8085`, Mailpit UI `127.0.0.1:8026:8025` (chỉ máy host truy cập được; máy khác vào qua Nginx cổng 5173); SMTP 1025 chỉ dùng trong Docker network. Mặc định chạy profile `dev` (dữ liệu demo, Swagger); trên máy người khác truy cập được, đặt `SPRING_PROFILES_ACTIVE=prod` trong `.env`.
+**Bước 1.** Kiểm tra Compose hợp lệ và xem tên service thực tế: `compose.yaml` (tên project cố định `busbooking`, nên volume/network luôn là `busbooking_*`) có `postgres`, `backend`, `frontend`, `mailpit`; PostgreSQL publish `127.0.0.1:5435:5432`, backend `127.0.0.1:8086:8085` và Actuator `127.0.0.1:8087:8081`, Mailpit UI `127.0.0.1:8026:8025` (chỉ máy host truy cập được); riêng frontend Nginx publish `5173:80` trên mọi interface, máy khác vào qua cổng này. SMTP 1025 chỉ dùng trong Docker network. `prometheus`, `grafana`, `postgres-exporter` chỉ chạy với `--profile metrics` (mục 6.6). Mặc định chạy profile `dev` (dữ liệu demo, Swagger); trên máy người khác truy cập được, đặt `SPRING_PROFILES_ACTIVE=prod` trong `.env`.
 
 ```powershell
 docker compose config --quiet
@@ -77,7 +78,9 @@ docker compose logs -f
 
 Thoát chế độ xem log bằng `Ctrl+C` (không dừng container).
 
-**Bước 4.** Mở Swagger tại `http://localhost:8086/swagger-ui/index.html` và Mailpit UI tại `http://localhost:8026`. Gửi yêu cầu đăng ký, đợi email xuất hiện trong Mailpit rồi dùng OTP để xác minh.
+**Bước 4.** Mở giao diện tại `http://localhost:5173`, Swagger tại `http://localhost:8086/swagger-ui/index.html` và Mailpit UI tại `http://localhost:8026`. Gửi yêu cầu đăng ký, đợi email xuất hiện trong Mailpit rồi dùng OTP để xác minh.
+
+Profile `dev` nạp dữ liệu demo từ `src/main/resources/db/seed/R__dev_seed_data.sql`: tài khoản `demo@busbooking.local` (USER, có sẵn booking) và `admin@busbooking.local` (ADMIN), mật khẩu `matkhau123`, đã xác minh email; kèm danh mục, chuyến xe và các tài khoản `khach001`…`khach150@busbooking.local`.
 
 **Dừng hệ thống** (không xóa database volume):
 
@@ -85,7 +88,7 @@ Thoát chế độ xem log bằng `Ctrl+C` (không dừng container).
 docker compose down
 ```
 
-**Dùng chung quota xác thực qua Redis.** `compose.scale.yaml` (xem mục 6.6) thêm Redis trên mạng riêng của Compose và bật `AUTH_RATE_LIMIT_BACKEND=redis`; backend chạy một mình dùng bộ đếm local. Khi triển khai nhiều backend, dùng chung Redis, `AUTH_RATE_REDIS_PREFIX` và các giá trị quota. Có thể cấu hình kết nối Redis ngoài Compose bằng các biến `SPRING_DATA_REDIS_*`.
+**Dùng chung quota xác thực qua Redis.** `deploy/compose.scale.yaml` (xem mục 6.6) thêm Redis trên mạng riêng của Compose và bật `AUTH_RATE_LIMIT_BACKEND=redis`; backend chạy một mình dùng bộ đếm local. Khi triển khai nhiều backend, dùng chung Redis, `AUTH_RATE_REDIS_PREFIX` và các giá trị quota. Có thể cấu hình kết nối Redis ngoài Compose bằng các biến `SPRING_DATA_REDIS_*`.
 
 Nginx ghi `X-Forwarded-For` từ kết nối trực tiếp. Cấu hình Compose tin địa chỉ proxy `172.31.241.2`. Khi triển khai ở mạng khác, dùng địa chỉ chính xác của proxy tin cậy và cấu hình proxy ghi đè header do client gửi.
 
@@ -94,10 +97,10 @@ Nginx ghi `X-Forwarded-For` từ kết nối trực tiếp. Cấu hình Compose 
 - `SPRING_PROFILES_ACTIVE=prod`: không nạp dữ liệu demo (tài khoản `admin@busbooking.local` có mật khẩu công khai), tắt Swagger.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH=true`, `SMTP_STARTTLS=true`, `SMTP_FROM`: nhà cung cấp email thật; mặc định gửi vào Mailpit.
 
-Bật HTTPS bằng cách đặt chứng chỉ của tên miền vào `certs/fullchain.pem` và `certs/privkey.pem` (ví dụ từ Let's Encrypt; thư mục `certs/` không được commit), rồi chạy:
+Bật HTTPS bằng cách đặt chứng chỉ của tên miền vào `deploy/certs/fullchain.pem` và `deploy/certs/privkey.pem` (ví dụ từ Let's Encrypt; thư mục `deploy/certs/` không được commit), rồi chạy:
 
 ```powershell
-docker compose -f compose.yaml -f compose.tls.yaml up -d --build
+docker compose -f compose.yaml -f deploy/compose.tls.yaml up -d --build
 ```
 
 Nginx khi đó nghe cổng 443, cổng 80 chỉ chuyển hướng sang HTTPS, và gửi HSTS. Mọi cấu hình Nginx đều gửi CSP, `X-Content-Type-Options` và `Referrer-Policy`.
@@ -133,7 +136,7 @@ Mailpit trong Compose không publish SMTP 1025 ra host, nên backend local khôn
 docker run -d --name busbooking-auth-mailpit `
   -p 127.0.0.1:1025:1025 `
   -p 127.0.0.1:8025:8025 `
-  axllent/mailpit:v1.27.8
+  axllent/mailpit:v1.21
 ```
 
 Mailpit UI: `http://localhost:8025`. Nếu container đã tồn tại, dùng `docker start busbooking-auth-mailpit` thay vì `docker run` lần nữa.
@@ -186,6 +189,7 @@ Với backend local cổng 8085 hoặc Compose publish 8086, khi tài liệu API
 
 | Thành phần | URL |
 |---|---|
+| Giao diện web | http://localhost:5173 (Compose, qua Nginx; API cùng origin tại http://localhost:5173/api) |
 | Swagger UI | http://localhost:8085/swagger-ui/index.html (local); http://localhost:8086/swagger-ui/index.html (Compose) |
 | OpenAPI JSON | http://localhost:8085/v3/api-docs (local); http://localhost:8086/v3/api-docs (Compose) |
 | Base API | http://localhost:8085/api (local); http://localhost:8086/api (Compose) |
@@ -203,10 +207,10 @@ docker compose --profile metrics up -d
 
 Prometheus ở http://127.0.0.1:9090, Grafana ở http://127.0.0.1:3000 (dashboard `BusBooking`, xem không cần đăng nhập, chỉ nghe loopback): request/s và mã phản hồi, p95/p99 theo endpoint, request/s theo instance, kết nối Hikari đang chờ/đang dùng, lock PostgreSQL đang chờ, heap JVM.
 
-**Chạy nhiều backend sau Nginx.** `compose.scale.yaml` bỏ tên container và cổng publish của backend để chạy nhiều replica, thêm Redis để rate limit auth dùng chung; frontend Nginx chia request cho mọi replica:
+**Chạy nhiều backend sau Nginx.** `deploy/compose.scale.yaml` bỏ tên container và cổng publish của backend để chạy nhiều replica, thêm Redis để rate limit auth dùng chung; frontend Nginx chia request cho mọi replica:
 
 ```powershell
-docker compose -f compose.yaml -f compose.scale.yaml --profile metrics up -d --scale backend=3
+docker compose -f compose.yaml -f deploy/compose.scale.yaml --profile metrics up -d --scale backend=3
 ```
 
 Nginx chỉ phân giải tên `backend` lúc khởi động, nên đổi số replica xong phải restart service `frontend`. Truy cập API qua http://localhost:5173/api.
@@ -215,7 +219,7 @@ Kiểm tra HTTP và xuất đặc tả API từ **ứng dụng đang chạy**:
 
 ```powershell
 Invoke-WebRequest http://localhost:8085/v3/api-docs `
-  -OutFile docs/openapi.json
+  -OutFile docs-improvement/openapi.json
 ```
 
 Swagger có thể bị tắt ngoài profile `dev`/`test` nếu chưa bật `API_DOCS_ENABLED`; **404 từ Swagger không đồng nghĩa backend bị lỗi**.
@@ -229,17 +233,33 @@ Swagger có thể bị tắt ngoài profile `dev`/`test` nếu chưa bật `API_
 5. `POST /api/bookings` — giữ ghế cho chuyến còn chỗ (vé `HELD`, giữ 10 phút theo `BOOKING_HOLD_MINUTES`); `POST /api/bookings/{id}/confirm` để xác nhận trước hạn, quá hạn thì vé thành `EXPIRED` và ghế được trả lại; kiểm tra xem/hủy booking theo quyền.
 6. Dùng tài khoản có quyền phù hợp để thử API quản trị; `USER` không được truy cập endpoint chỉ dành cho `ADMIN`/`SUPER_ADMIN`.
 
-Chi tiết request/response, quyền và 32 endpoint: [`04-api-design.md`](04-api-design.md). `docs/openapi.json` hiện còn lỗi response/validation và chứa `/error` nội bộ; chỉ xuất lại JSON không bảo đảm các lỗi đặc tả đã được sửa.
+Chi tiết request/response, quyền và 38 endpoint: [`04-api-design.md`](04-api-design.md). `docs-improvement/openapi.json` hiện còn lỗi response/validation; chỉ xuất lại JSON không bảo đảm các lỗi đặc tả đã được sửa.
 
 ## 6.7. Kiểm thử và benchmark
 
-```powershell
-# Chạy các bài kiểm thử Maven; cần môi trường test và database test độc lập
-.\mvnw.cmd test
+Test dùng profile `test` với database riêng. `application-test.properties` đọc `TEST_DB_URL` (mặc định `jdbc:postgresql://localhost:55433/busbooking_test`), `TEST_DB_USERNAME` (mặc định `busbooking_test`) và `TEST_DB_PASSWORD`. Khởi động PostgreSQL test (tự chọn mật khẩu):
 
+```powershell
+docker run -d --rm --name busbooking-test-db -e POSTGRES_DB=busbooking_test -e POSTGRES_USER=busbooking_test -e POSTGRES_PASSWORD=<mật-khẩu-test> -p 127.0.0.1:55433:5432 postgres:16-alpine
+```
+
+Đặt mật khẩu tương ứng cho phiên PowerShell (URL và user đã khớp giá trị mặc định):
+
+```powershell
+$env:TEST_DB_PASSWORD = "<mật-khẩu-test>"
+```
+
+```powershell
+# Chạy các bài kiểm thử Maven
+.\mvnw.cmd test
+```
+
+```powershell
 # Build JAR để đóng gói/bàn giao
 .\mvnw.cmd -DskipTests clean package
 ```
+
+Test Redis rate limit (`RedisRateLimitIntegrationTest`) chỉ chạy khi có biến `TEST_REDIS_PORT` trỏ tới một Redis trên `127.0.0.1`, như CI (`.github/workflows/ci.yml` chạy `mvn -B verify` với service PostgreSQL 16 và Redis 7, rồi build Docker image và kiểm tra `docker compose ... config` với cả hai overlay).
 
 **Không trỏ integration test vào database development có dữ liệu cần giữ.** Kiểm tra `application-test.properties`, `TEST_DB_URL` và các biến liên quan trước khi chạy test. Lệnh `test` mặc định chưa bao gồm các class `*SmokeIT`; có thể chạy riêng bằng `.\mvnw.cmd "-Dtest=AuthLiveHttpSmokeIT,SuperAdminLiveHttpSmokeIT,SmtpMailpitSmokeIT" test` khi database test và Mailpit sẵn sàng. Kết quả build/test mới nhất chưa được xác minh trong lần đối chiếu tài liệu.
 
@@ -250,7 +270,7 @@ Baseline hiệu năng GET Trip / POST Booking Pha 1 trên Kaggle CPU, script Loc
 | Hiện tượng | Kiểm tra / xử lý |
 |---|---|
 | `Connection refused` PostgreSQL | `docker compose ps` hoặc `docker ps`; kiểm tra đúng **cổng host**, database, user, password và network |
-| Flyway checksum mismatch / missing table | Đối chiếu migration V1–V22 với lịch sử DB. |
+| Flyway checksum mismatch / missing table | Đối chiếu migration V1–V27 (và `R__dev_seed_data.sql` ở profile `dev`) với lịch sử DB. |
 | PostgreSQL từ chối múi giờ `Asia/Saigon` | Đặt JVM option `-Duser.timezone=Asia/Ho_Chi_Minh` khi chạy từ IDE hoặc JAR trực tiếp. |
 | Backend không lên vì JWT/OTP secret | Kiểm tra ba secret Base64 độc lập. JWT và HMAC OTP cần ít nhất 32 byte, còn khóa outbox cần đúng 32 byte sau giải mã. |
 | Không nhận OTP | Kiểm tra SMTP, Mailpit và log worker. Khi chạy backend trên host, dùng cổng SMTP publish ra host. Worker thử lại với giãn cách tăng dần, tối đa 8 lần trong thời hạn OTP. |
@@ -258,12 +278,17 @@ Baseline hiệu năng GET Trip / POST Booking Pha 1 trên Kaggle CPU, script Loc
 | HTTP `401` / `403` | Kiểm tra JWT, trạng thái xác minh email, role và ownership; đây có thể là phản hồi phân quyền đúng |
 | HTTP `429` khi thử auth | Rate limit đăng ký/đăng nhập/OTP; chờ hết cửa sổ giới hạn thay vì gọi liên tục |
 | HTTP `503` ở endpoint auth khi bật Redis | Kiểm tra kết nối Redis. Auth trả `Retry-After` trong khi chưa xác định được quota. |
-| Port 8085/8086/5435/1025/8025/8026 bị chiếm | Dùng `docker ps`, `Get-NetTCPConnection -State Listen`; điều chỉnh cổng phù hợp trong cấu hình |
+| Port 5173/8085/8086/8087/5435/55433/1025/8025/8026 bị chiếm | Dùng `docker ps`, `Get-NetTCPConnection -State Listen`; điều chỉnh cổng phù hợp trong cấu hình |
 | Chạy Java trong container không kết nối được DB | JDBC URL không được dùng `localhost` để chỉ container PostgreSQL khác; dùng tên service/network thực tế |
 
 
 ### Kiểm tra Flyway từ V16
 
-Chạy riêng bằng mvn -B -Dtest=FlywayUpgradeIntegrationTest test, hoặc chạy mvn -B verify như CI.
-Dùng PostgreSQL 16 dành riêng cho kiểm thử. Tài khoản TEST_DB_USERNAME cần quyền CREATEDB để suite tạo và dọn các DB kiểm thử riêng trong cùng cụm.
+Chạy riêng bằng lệnh dưới đây, hoặc chạy `.\mvnw.cmd -B verify` như CI:
+
+```powershell
+.\mvnw.cmd -B "-Dtest=FlywayUpgradeIntegrationTest" test
+```
+
+Dùng PostgreSQL 16 dành riêng cho kiểm thử (container `busbooking-test-db` ở mục 6.7 là đủ). Tài khoản `TEST_DB_USERNAME` cần quyền CREATEDB để suite tạo và dọn các DB kiểm thử riêng trong cùng cụm.
 Suite kiểm tra cài schema trên DB trống, nâng cấp dữ liệu V16 và xác nhận chạy lại migration không làm mất dữ liệu.

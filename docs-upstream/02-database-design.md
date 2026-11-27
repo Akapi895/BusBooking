@@ -227,7 +227,7 @@ Khi xác minh thành công, challenge được xóa và `users.email_verified` �
 | `passenger_phone` | VARCHAR(20) | Số điện thoại hành khách |
 | `quantity` | INT | Số vé |
 | `unit_price` | DECIMAL(12,2) | Đơn giá tại thời điểm đặt |
-| `total_amount` | DECIMAL(22,2) | Tổng tiền tại thời điểm đặt, mở rộng ở V21 |
+| `total_amount` | DECIMAL(12,2) | Tổng tiền tại thời điểm đặt |
 | `status` | VARCHAR(30) | Trạng thái đặt vé |
 | `booked_at` | TIMESTAMP | Thời điểm đặt |
 
@@ -261,45 +261,7 @@ Các khóa `PRIMARY KEY`/`UNIQUE` tạo hoặc dựa trên index tương ứng t
 | Lịch sử đặt vé | `bookings.user_id` |
 | Danh sách booking của chuyến | `bookings.trip_id` |
 
-V20 thêm hai partial index cho chuyến `SCHEDULED` còn ghế theo `(departure_time, id)` và `(route_id, departure_time, id)`. Index `bookings(user_id, booked_at DESC, id DESC)` hỗ trợ phân trang lịch sử cá nhân.
-
-V22 thêm index `bookings(trip_id, status)` để quản trị tra cứu và đếm ghế xác nhận theo chuyến. Hai partial index theo giờ đi của chuyến `SCHEDULED` và giờ đến của chuyến `IN_PROGRESS` hỗ trợ job chuyển trạng thái, kể cả khi chuyến đã hết ghế.
-
-## 2.6. Migration Phase 2
-
-| Phiên bản | Thay đổi |
-|---|---|
-| V17 | `booking_idempotency` giữ hash yêu cầu và ID booking theo cặp `(user_id, request_key)`. Bản ghi hết hạn sau 24 giờ. |
-| V18 | Exclusion constraint GiST với `btree_gist` chặn hai khoảng giờ chồng nhau trên cùng xe. Khoảng giờ gồm thời điểm đi và loại thời điểm đến. Chuyến `CANCELLED` không tham gia ràng buộc. |
-| V19 | `verification_outbox` giữ nội dung OTP đã mã hóa, số lần gửi và thời điểm có thể thử lại. Worker xóa nội dung mã hóa khi hoàn tất hoặc hết hạn. |
-| V20 | Thêm index tìm chuyến còn ghế và phân trang lịch sử. |
-| V21 | Mở rộng `bookings.total_amount` thành `NUMERIC(22,2)`. |
-| V22 | Thêm index booking theo chuyến và partial index tìm chuyến tới mốc chuyển trạng thái. |
-
-Trước khi áp dụng V18 vào DB có dữ liệu cũ, kiểm tra lịch trùng bằng truy vấn dưới đây. Migration sẽ dừng với ID của một cặp chuyến xung đột nếu còn dữ liệu cần xử lý. Tài khoản migration cần quyền tạo extension `btree_gist` hoặc extension phải được quản trị DB cài trước.
-
-```sql
-SELECT a.vehicle_id, a.id AS first_trip, b.id AS second_trip
-FROM trips a
-JOIN trips b ON a.vehicle_id = b.vehicle_id AND a.id < b.id
-WHERE a.status <> 'CANCELLED' AND b.status <> 'CANCELLED'
-  AND a.departure_time < b.arrival_time
-  AND b.departure_time < a.arrival_time;
-```
-
-Để đối soát ghế của chuyến sắp đi, kiểm tra `available_seats + SUM(quantity)` của các booking `CONFIRMED` bằng sức chứa hiện tại của xe.
-
-```sql
-SELECT t.id, t.available_seats,
-       COALESCE(SUM(b.quantity), 0) AS confirmed_seats, v.seat_capacity
-FROM trips t
-JOIN vehicles v ON v.id = t.vehicle_id
-LEFT JOIN bookings b ON b.trip_id = t.id AND b.status = 'CONFIRMED'
-WHERE t.status = 'SCHEDULED'
-  AND t.departure_time > CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh'
-GROUP BY t.id, v.seat_capacity
-HAVING t.available_seats + COALESCE(SUM(b.quantity), 0) <> v.seat_capacity;
-```
+**Phân biệt thiết kế với triển khai:** Sau V16, các index `idx_routes_destination_id`, `idx_trips_route_id`, `idx_vehicles_operator_id`, `idx_trips_vehicle_id` đã được bỏ theo migration; PK/UNIQUE và các unique index nghiệp vụ được giữ. Không có migration tạo composite index `(route_id, departure_time)`; đây chỉ là lựa chọn tối ưu dự kiến. Trạng thái `pg_indexes` của database đang chạy chưa xác minh.
 
 ## 2.6. Migration và vận hành schema
 

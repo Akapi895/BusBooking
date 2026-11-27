@@ -1,5 +1,5 @@
 # Render Blueprint: free backend (Docker) + free static frontend. Database: Neon (outside Render).
-# Setup and the values to enter in the Dashboard: docs/06-running-guide.md, "Deploy lên Render + Neon".
+# Setup and the values to enter in the Dashboard: docs-improvement/06-running-guide.md, "Deploy lên Render + Neon".
 # If Render gives a service a different URL than <name>.onrender.com, update CORS_ALLOWED_ORIGINS
 # and the /api/* rewrite below to match.
 services:
@@ -68,7 +68,7 @@ services:
     runtime: static
     buildCommand: echo "static files, no build"
     staticPublishPath: ./frontend
-    # Same security headers as frontend/nginx-app.conf.
+    # Same security headers as deploy/nginx/nginx-app.conf.
     headers:
       - path: /*
         name: Content-Security-Policy
